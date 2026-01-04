@@ -1,0 +1,9 @@
+# ESXi Connection
+esxi_hostname = "192.168.1.x"
+esxi_username = "root"
+esxi_password = "your-password-here"
+esxi_hostport = 22
+
+# VM Template
+ovf_source = "/vmfs/volumes/datastore1/templates/template-vm.ovf"
+disk_store = "datastore1"

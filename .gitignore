@@ -1,0 +1,49 @@
+# ===== Terraform =====
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files (chứa state của infra)
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Sensitive variables (passwords, secrets)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config files
+.terraformrc
+terraform.rc
+
+# ===== Ansible =====
+# Vault password files
+.vault_pass
+*.vault_pass
+
+# Inventory với sensitive data
+ansible/inventory/hosts
+ansible/inventory/*.yml
+!ansible/inventory/*.example.yml
+
+# Retry files
+*.retry
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ===== Logs =====
+*.log
