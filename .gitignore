@@ -31,9 +31,8 @@ terraform.rc
 *.vault_pass
 
 # Inventory với sensitive data
-ansible/inventory/hosts
-ansible/inventory/*.yml
-!ansible/inventory/*.example.yml
+ansible/inventory/hosts.yml
+!ansible/inventory/*.example
 
 # Retry files
 *.retry
@@ -44,6 +43,10 @@ ansible/inventory/*.yml
 *.swp
 *.swo
 .DS_Store
+
+# ===== Tools =====
+tools/
+
 
 # ===== Logs =====
 *.log

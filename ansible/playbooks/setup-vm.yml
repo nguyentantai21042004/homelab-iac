@@ -1,0 +1,51 @@
+---
+# Playbook: Setup VM cơ bản (hostname, static IP)
+- name: Setup VM
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ new_hostname }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ new_hostname }}"
+
+    - name: Create netplan config
+      copy:
+        dest: /etc/netplan/00-static-ip.yaml
+        content: |
+          network:
+            version: 2
+            ethernets:
+              {{ network_interface }}:
+                addresses:
+                  - {{ new_ip }}/24
+                gateway4: {{ new_gateway }}
+                nameservers:
+                  addresses:
+                    - 8.8.8.8
+                    - 1.1.1.1
+        mode: "0600"
+
+    - name: Remove old netplan configs
+      shell: |
+        find /etc/netplan -name "*.yaml" ! -name "00-static-ip.yaml" -delete
+      args:
+        warn: false
+
+    - name: Apply netplan
+      command: netplan apply
+      async: 45
+      poll: 0
+
+    - name: Wait for new IP
+      wait_for_connection:
+        delay: 5
+        timeout: 60
+      vars:
+        ansible_host: "{{ new_ip }}"

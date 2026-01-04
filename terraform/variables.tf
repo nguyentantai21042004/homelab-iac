@@ -21,9 +21,9 @@ variable "esxi_hostport" {
 }
 
 # ===== Shared VM Config =====
-variable "ovf_source" {
+variable "clone_from_vm" {
   type        = string
-  description = "Path to OVF template"
+  description = "Name of VM to clone from"
 }
 
 variable "disk_store" {

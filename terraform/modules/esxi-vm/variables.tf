@@ -10,9 +10,9 @@ variable "disk_store" {
   description = "ESXi datastore name"
 }
 
-variable "ovf_source" {
+variable "clone_from_vm" {
   type        = string
-  description = "Path to OVF template"
+  description = "Name of existing VM to clone from"
 }
 
 variable "numvcpus" {
@@ -25,6 +25,12 @@ variable "memsize" {
   type        = number
   default     = 2048
   description = "Memory in MB"
+}
+
+variable "boot_disk_size" {
+  type        = number
+  default     = 0
+  description = "Boot disk size in GB (0 = keep template size)"
 }
 
 variable "network" {
