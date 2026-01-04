@@ -395,4 +395,5 @@ terraform plan
 ## Tài liệu bổ sung / Additional Docs
 
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
+- [PostgreSQL Server Setup](documents/postgres.md)
 - [Mutagen - Cơ chế hoạt động / How it works](documents/mutagen.md)

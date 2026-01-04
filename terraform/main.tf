@@ -11,14 +11,14 @@ module "admin" {
 }
 
 # ===== Postgres VM =====
-# module "postgres" {
-#   source = "./modules/esxi-vm"
-#
-#   guest_name     = "postgres"
-#   clone_from_vm  = var.clone_from_vm
-#   disk_store     = var.disk_store
-#   numvcpus       = 3
-#   memsize        = 6144
-#   data_disk_size = 50
-#   network        = local.port_groups.db_network
-# }
+module "postgres" {
+  source = "./modules/esxi-vm"
+
+  guest_name     = "postgres"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = 3
+  memsize        = 6144 # 6GB RAM
+  data_disk_size = 100  # 100GB data disk
+  network        = local.port_groups.db_network
+}

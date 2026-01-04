@@ -1,0 +1,91 @@
+---
+# Playbook: Add new database with RBAC users
+# Usage: ansible-playbook playbooks/postgres-add-database.yml -e "db_name=myapp"
+
+- name: Add new PostgreSQL database
+  hosts: postgres_servers
+  become: yes
+
+  vars:
+    db_name: "{{ db_name }}"
+    # Passwords - override these with -e or vault
+    master_pwd: "{{ db_name }}_master_pwd_change_me"
+    dev_pwd: "{{ db_name }}_dev_pwd_change_me"
+    prod_pwd: "{{ db_name }}_prod_pwd_change_me"
+    readonly_pwd: "{{ db_name }}_readonly_pwd_change_me"
+
+  tasks:
+    - name: Validate db_name is provided
+      fail:
+        msg: "db_name is required. Usage: -e 'db_name=myapp'"
+      when: db_name is not defined or db_name == ""
+
+    - name: Create SQL script
+      copy:
+        dest: /tmp/add-{{ db_name }}.sql
+        content: |
+          -- Create database
+          CREATE DATABASE {{ db_name }};
+
+          -- Create users
+          CREATE USER {{ db_name }}_master WITH PASSWORD '{{ master_pwd }}';
+          CREATE USER {{ db_name }}_dev WITH PASSWORD '{{ dev_pwd }}';
+          CREATE USER {{ db_name }}_prod WITH PASSWORD '{{ prod_pwd }}';
+          CREATE USER {{ db_name }}_readonly WITH PASSWORD '{{ readonly_pwd }}';
+
+          -- Connect to new database
+          \c {{ db_name }}
+
+          -- Grant connect
+          GRANT CONNECT ON DATABASE {{ db_name }} TO {{ db_name }}_master, {{ db_name }}_dev, {{ db_name }}_prod, {{ db_name }}_readonly;
+
+          -- MASTER: Full ownership
+          ALTER DATABASE {{ db_name }} OWNER TO {{ db_name }}_master;
+          GRANT ALL PRIVILEGES ON DATABASE {{ db_name }} TO {{ db_name }}_master;
+          GRANT ALL PRIVILEGES ON SCHEMA public TO {{ db_name }}_master;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO {{ db_name }}_master;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO {{ db_name }}_master;
+
+          -- DEV: Create/Alter tables, CRUD
+          GRANT USAGE, CREATE ON SCHEMA public TO {{ db_name }}_dev;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{ db_name }}_dev;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {{ db_name }}_dev;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ db_name }}_dev;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {{ db_name }}_dev;
+
+          -- PROD: CRUD only
+          GRANT USAGE ON SCHEMA public TO {{ db_name }}_prod;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{ db_name }}_prod;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {{ db_name }}_prod;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ db_name }}_prod;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {{ db_name }}_prod;
+
+          -- READONLY: SELECT only
+          GRANT USAGE ON SCHEMA public TO {{ db_name }}_readonly;
+          GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{ db_name }}_readonly;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {{ db_name }}_readonly;
+        mode: "0644"
+
+    - name: Execute SQL script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/add-{{ db_name }}.sql
+      register: sql_result
+
+    - name: Cleanup SQL script
+      file:
+        path: /tmp/add-{{ db_name }}.sql
+        state: absent
+
+    - name: Show result
+      debug:
+        msg: |
+          Database '{{ db_name }}' created successfully!
+
+          Users created:
+            - {{ db_name }}_master   (Full access)
+            - {{ db_name }}_dev      (Create/Alter, CRUD)
+            - {{ db_name }}_prod     (CRUD only)
+            - {{ db_name }}_readonly (SELECT only)
+
+          Connection string:
+            postgresql://{{ db_name }}_prod:xxx@{{ ansible_host }}:5432/{{ db_name }}

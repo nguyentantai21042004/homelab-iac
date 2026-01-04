@@ -28,8 +28,6 @@ mutagen sync create \
     "${ADMIN_VM_USER}@${ADMIN_VM_IP}:${REMOTE_PATH}" \
     --name="$SYNC_NAME" \
     --ignore=".terraform" \
-    --ignore="*.tfstate" \
-    --ignore="*.tfstate.*" \
     --ignore=".terraform.lock.hcl" \
     --ignore="tools/" \
     --ignore=".git" \

@@ -7,4 +7,4 @@ REMOTE_PATH="/home/${ADMIN_VM_USER}/homelab-iac/terraform"
 
 echo "Running terraform destroy on ${ADMIN_VM_IP}..."
 
-ssh "${ADMIN_VM_USER}@${ADMIN_VM_IP}" "cd ${REMOTE_PATH} && terraform destroy -auto-approve"
+ssh "${ADMIN_VM_USER}@${ADMIN_VM_IP}" "cd ${REMOTE_PATH} && terraform init && terraform destroy -auto-approve"

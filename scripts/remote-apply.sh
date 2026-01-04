@@ -7,4 +7,15 @@ REMOTE_PATH="/home/${ADMIN_VM_USER}/homelab-iac/terraform"
 
 echo "Running terraform apply on ${ADMIN_VM_IP}..."
 
-ssh "${ADMIN_VM_USER}@${ADMIN_VM_IP}" "cd ${REMOTE_PATH} && terraform apply -auto-approve"
+# Check if sync is running
+if ! mutagen sync list | grep -q "homelab-iac"; then
+    echo "⚠️  Warning: Mutagen sync not running. Files may not be up-to-date."
+    echo "   Run: ./scripts/sync-start.sh ${ADMIN_VM_IP} ${ADMIN_VM_USER}"
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+ssh "${ADMIN_VM_USER}@${ADMIN_VM_IP}" "cd ${REMOTE_PATH} && (test -d .terraform || terraform init) && terraform apply -auto-approve"

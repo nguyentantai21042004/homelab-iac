@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:{{ postgres_version }}-alpine
+    container_name: pg{{ postgres_version }}_prod
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD={{ postgres_password }}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      # Bypass Overlay: Map directly to Data Disk
+      - ./data:/var/lib/postgresql/data
+      # Auto-execute RBAC script on first init
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    shm_size: 1gb
+    networks:
+      - pg_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  pg_net:
+    driver: bridge
