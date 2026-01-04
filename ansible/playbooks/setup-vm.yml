@@ -1,20 +1,28 @@
 ---
-# Playbook: Setup VM cơ bản (hostname, static IP)
+# Playbook: Basic VM Setup
+# - Set hostname
+# - Config static IP
+# - Mount data disk (if exists)
+
 - name: Setup VM
   hosts: all
   become: yes
 
   tasks:
+    # ===== Hostname =====
     - name: Set hostname
       hostname:
-        name: "{{ new_hostname }}"
+        name: "{{ vm_hostname }}"
+      when: vm_hostname is defined
 
     - name: Update /etc/hosts
       lineinfile:
         path: /etc/hosts
         regexp: '^127\.0\.1\.1'
-        line: "127.0.1.1 {{ new_hostname }}"
+        line: "127.0.1.1 {{ vm_hostname }}"
+      when: vm_hostname is defined
 
+    # ===== Static IP =====
     - name: Create netplan config
       copy:
         dest: /etc/netplan/00-static-ip.yaml
@@ -22,30 +30,82 @@
           network:
             version: 2
             ethernets:
-              {{ network_interface }}:
+              ens36:
                 addresses:
-                  - {{ new_ip }}/24
-                gateway4: {{ new_gateway }}
+                  - {{ static_ip }}
+                routes:
+                  - to: default
+                    via: {{ gateway }}
+                nameservers:
+                  addresses:
+                    - 8.8.8.8
+                    - 1.1.1.1
+              ens160:
+                addresses:
+                  - {{ static_ip }}
+                routes:
+                  - to: default
+                    via: {{ gateway }}
+                    metric: 200
                 nameservers:
                   addresses:
                     - 8.8.8.8
                     - 1.1.1.1
         mode: "0600"
+      when: static_ip is defined
+      register: netplan_config
 
     - name: Remove old netplan configs
-      shell: |
-        find /etc/netplan -name "*.yaml" ! -name "00-static-ip.yaml" -delete
-      args:
-        warn: false
+      shell: find /etc/netplan -name "*.yaml" ! -name "00-static-ip.yaml" -delete
+      when: netplan_config.changed
 
     - name: Apply netplan
       command: netplan apply
       async: 45
       poll: 0
+      when: netplan_config.changed
 
-    - name: Wait for new IP
+    - name: Wait for connection with new IP
       wait_for_connection:
         delay: 5
         timeout: 60
-      vars:
-        ansible_host: "{{ new_ip }}"
+      when: netplan_config.changed
+
+    # ===== Data Disk =====
+    - name: Check if data disk exists
+      stat:
+        path: "{{ data_disk_device }}"
+      register: data_disk
+      when: data_disk_device is defined
+
+    - name: Check if data disk is already formatted
+      command: blkid {{ data_disk_device }}
+      register: blkid_result
+      failed_when: false
+      changed_when: false
+      when: data_disk_device is defined and data_disk.stat.exists | default(false)
+
+    - name: Format data disk
+      filesystem:
+        fstype: ext4
+        dev: "{{ data_disk_device }}"
+      when:
+        - data_disk_device is defined
+        - data_disk.stat.exists | default(false)
+        - blkid_result.rc != 0
+
+    - name: Create mount point
+      file:
+        path: "{{ data_mount_point }}"
+        state: directory
+        mode: "0755"
+      when: data_disk_device is defined and data_disk.stat.exists | default(false)
+
+    - name: Mount data disk
+      mount:
+        path: "{{ data_mount_point }}"
+        src: "{{ data_disk_device }}"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+      when: data_disk_device is defined and data_disk.stat.exists | default(false)

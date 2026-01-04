@@ -27,13 +27,13 @@ variable "memsize" {
   description = "Memory in MB"
 }
 
-variable "boot_disk_size" {
-  type        = number
-  default     = 0
-  description = "Boot disk size in GB (0 = keep template size)"
-}
-
 variable "network" {
   type        = string
   description = "Port group name"
+}
+
+variable "data_disk_size" {
+  type        = number
+  default     = 0
+  description = "Additional data disk size in GB (0 = no extra disk)"
 }

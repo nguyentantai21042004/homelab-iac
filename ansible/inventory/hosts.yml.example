@@ -1,15 +1,20 @@
-# Inventory - danh sách hosts
+# Inventory - Danh sách servers
 all:
   children:
     postgres_servers:
       hosts:
         postgres:
-          ansible_host: 172.16.19.xxx  # IP hiện tại của VM
-          ansible_user: tantai
-          # ansible_password: "your-password"
-          
+          # Connection - IP hiện tại của VM
+          ansible_host: 172.16.19.xxx
+          ansible_user: your-user
+          ansible_password: "your-password"
+
           # Config mới
-          new_hostname: "postgres-prod-01"
-          new_ip: "172.16.19.10"
-          new_gateway: "172.16.19.1"
-          network_interface: "ens36"
+          vm_hostname: "postgres-prod-01"
+          static_ip: "172.16.19.10/24"
+          gateway: "172.16.19.1"
+          network_interface: "ens160"
+
+          # Data disk
+          data_disk_device: "/dev/sdb"
+          data_mount_point: "/data"

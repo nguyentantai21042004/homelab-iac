@@ -1,0 +1,104 @@
+---
+# Playbook: Setup Admin VM
+# Install Terraform, Ansible, OVF Tool
+# Run AFTER setup-vm.yml
+
+- name: Setup Admin VM
+  hosts: admin
+  become: yes
+
+  tasks:
+    # ===== System Update =====
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - wget
+          - unzip
+          - git
+          - software-properties-common
+          - python3-pip
+          - openssh-server
+          - open-vm-tools
+        state: present
+
+    # ===== Terraform =====
+    - name: Add HashiCorp GPG key
+      shell: |
+        wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+    - name: Add HashiCorp repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+
+    - name: Install Terraform
+      apt:
+        name: terraform
+        state: present
+        update_cache: yes
+
+    # ===== Ansible =====
+    - name: Install Ansible
+      apt:
+        name: ansible
+        state: present
+
+    # ===== OVF Tool =====
+    - name: Create ovftool directory
+      file:
+        path: /opt/ovftool
+        state: directory
+        mode: "0755"
+
+    - name: Copy OVF Tool from local
+      copy:
+        src: ../../tools/ovftool/
+        dest: /opt/ovftool/
+        mode: "0755"
+
+    - name: Create ovftool symlink
+      file:
+        src: /opt/ovftool/ovftool
+        dest: /usr/local/bin/ovftool
+        state: link
+
+    # ===== Setup workspace =====
+    - name: Create workspace directory
+      file:
+        path: "/home/{{ ansible_user }}/homelab-iac"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    # ===== Verify installation =====
+    - name: Check Terraform version
+      command: terraform version
+      register: tf_version
+      changed_when: false
+
+    - name: Check Ansible version
+      command: ansible --version
+      register: ansible_version
+      changed_when: false
+
+    - name: Check OVF Tool version
+      command: ovftool --version
+      register: ovftool_version
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Show installed versions
+      debug:
+        msg: |
+          Terraform: {{ tf_version.stdout_lines[0] }}
+          Ansible: {{ ansible_version.stdout_lines[0] }}
+          OVF Tool: {{ ovftool_version.stdout_lines[0] | default('Not installed') }}
