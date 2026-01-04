@@ -1,20 +1,40 @@
-# Inventory - Danh sách servers
+# Inventory - Server list
+# Copy this file to hosts.yml and update with your values
+
 all:
   children:
+    # ===== Admin VM =====
+    admin_servers:
+      hosts:
+        admin:
+          ansible_host: 192.168.1.xxx     # DHCP IP first, then static
+          ansible_user: your-user
+
+          vm_hostname: "admin"
+          static_ip: "192.168.1.100/24"   # Target static IP
+          gateway: "192.168.1.1"
+
+    # ===== Database Servers =====
     postgres_servers:
       hosts:
         postgres:
-          # Connection - IP hiện tại của VM
           ansible_host: 172.16.19.xxx
           ansible_user: your-user
-          ansible_password: "your-password"
 
-          # Config mới
-          vm_hostname: "postgres-prod-01"
+          vm_hostname: "postgres"
           static_ip: "172.16.19.10/24"
           gateway: "172.16.19.1"
-          network_interface: "ens160"
 
-          # Data disk
+          # Data disk (optional)
           data_disk_device: "/dev/sdb"
-          data_mount_point: "/data"
+          data_mount_point: "/var/lib/postgresql"
+
+    # ===== Web Servers =====
+    # web_servers:
+    #   hosts:
+    #     web-01:
+    #       ansible_host: 172.16.20.xxx
+    #       ansible_user: your-user
+    #       vm_hostname: "web-01"
+    #       static_ip: "172.16.20.10/24"
+    #       gateway: "172.16.20.1"

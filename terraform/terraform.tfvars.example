@@ -2,8 +2,7 @@
 esxi_hostname = "192.168.1.x"
 esxi_username = "root"
 esxi_password = "your-password-here"
-esxi_hostport = 22
 
-# VM Template
-ovf_source = "/vmfs/volumes/datastore1/templates/template-vm.ovf"
-disk_store = "datastore1"
+# VM Template (name of existing VM on ESXi to clone from)
+clone_from_vm = "template-vm"
+disk_store    = "datastore1"

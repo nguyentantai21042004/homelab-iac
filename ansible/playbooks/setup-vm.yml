@@ -65,6 +65,11 @@
       poll: 0
       when: netplan_config.changed
 
+    - name: Update ansible_host to new IP
+      set_fact:
+        ansible_host: "{{ static_ip | regex_replace('/.*', '') }}"
+      when: netplan_config.changed
+
     - name: Wait for connection with new IP
       wait_for_connection:
         delay: 5

@@ -51,16 +51,16 @@
         name: ansible
         state: present
 
-    # ===== OVF Tool =====
+    # ===== OVF Tool (Linux version) =====
     - name: Create ovftool directory
       file:
         path: /opt/ovftool
         state: directory
         mode: "0755"
 
-    - name: Copy OVF Tool from local
+    - name: Copy OVF Tool from local (Linux version)
       copy:
-        src: ../../tools/ovftool/
+        src: ../../linux/ovftool/
         dest: /opt/ovftool/
         mode: "0755"
 
@@ -94,11 +94,10 @@
       command: ovftool --version
       register: ovftool_version
       changed_when: false
-      ignore_errors: yes
 
     - name: Show installed versions
       debug:
         msg: |
-          Terraform: {{ tf_version.stdout_lines[0] }}
-          Ansible: {{ ansible_version.stdout_lines[0] }}
-          OVF Tool: {{ ovftool_version.stdout_lines[0] | default('Not installed') }}
+          Terraform: {{ tf_version.stdout_lines[0] | default('N/A') }}
+          Ansible: {{ ansible_version.stdout_lines[0] | default('N/A') }}
+          OVF Tool: {{ ovftool_version.stdout_lines[0] | default('N/A') }}

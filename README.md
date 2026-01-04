@@ -1,6 +1,6 @@
 # Homelab IaC
 
-Infrastructure as Code cho homelab ESXi server.
+> Infrastructure as Code cho ESXi homelab - Tự động hóa việc tạo và cấu hình VM
 
 **Ngôn ngữ / Language:** [Tiếng Việt](#tiếng-việt) | [English](#english)
 
@@ -8,74 +8,110 @@ Infrastructure as Code cho homelab ESXi server.
 
 ## Tiếng Việt
 
-### Mục lục
-
-- [Giới thiệu](#giới-thiệu)
-- [Yêu cầu](#yêu-cầu)
-- [Cấu trúc project](#cấu-trúc-project)
-- [Cài đặt](#cài-đặt)
-- [Chuẩn bị Template VM](#chuẩn-bị-template-vm)
-- [Sử dụng](#sử-dụng)
-  - [Terraform - Tạo VM](#terraform---tạo-vm)
-  - [Ansible - Config VM](#ansible---config-vm)
-- [Thêm VM mới](#thêm-vm-mới)
-
-### Giới thiệu
-
-Repo này dùng để quản lý infrastructure của homelab ESXi server bằng code:
-
-- **Terraform**: Tạo/xóa VM trên ESXi
-- **Ansible**: Config bên trong VM (hostname, IP, cài đặt services)
-
-### Yêu cầu
-
-#### Trên máy local (macOS/Linux)
-
-| Tool      | Version | Cài đặt                                                                                               |
-| --------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| Terraform | >= 1.0  | `brew install terraform`                                                                              |
-| Ansible   | >= 2.9  | `brew install ansible`                                                                                |
-| OVF Tool  | >= 4.0  | [Download từ VMware](https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest) |
-
-#### Trên ESXi server
-
-- ESXi 6.7+ với SSH enabled
-- Datastore có template VM sẵn
-- Network port groups đã tạo
-
-#### Trên Template VM
-
-- Ubuntu Server 22.04+ (hoặc distro khác)
-- `open-vm-tools` đã cài (để Terraform lấy được IP)
-- User có quyền sudo
-- SSH enabled
-
-### Cấu trúc project
+### Tổng quan
 
 ```
-.
-├── terraform/
-│   ├── main.tf              # Định nghĩa các VMs
-│   ├── provider.tf          # Kết nối ESXi
-│   ├── variables.tf         # Biến input
-│   ├── outputs.tf           # Output (IP của VMs)
-│   ├── locals.tf            # Giá trị cố định (port groups)
-│   ├── terraform.tfvars     # Giá trị thật (gitignored)
-│   └── modules/
-│       └── esxi-vm/         # Module tái sử dụng
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              WORKFLOW                                        │
+│                                                                             │
+│   LOCAL MACHINE                    ESXi SERVER (192.168.1.50)               │
+│   ┌─────────────┐                  ┌─────────────────────────────────┐      │
+│   │             │   Mutagen Sync   │  ┌─────────┐    ┌─────────────┐ │      │
+│   │  Kiro IDE   │◄────────────────►│  │ Admin   │───►│ Template VM │ │      │
+│   │             │                  │  │   VM    │    └─────────────┘ │      │
+│   │  - Edit     │                  │  │         │           │        │      │
+│   │  - Plan     │   SSH Commands   │  │ Terraform           ▼        │      │
+│   │  - Git      │─────────────────►│  │ Ansible │    ┌─────────────┐ │      │
+│   │             │                  │  │ OVFTool │───►│  New VMs    │ │      │
+│   └─────────────┘                  │  └─────────┘    └─────────────┘ │      │
+│                                    └─────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Tại sao cần Admin VM?**
+
+Provider `josenk/esxi` khi clone VM từ local sẽ download template về rồi upload lại → chậm. Admin VM nằm trong ESXi network, clone trực tiếp qua internal network → nhanh hơn 5-10x.
+
+### Cấu trúc Project
+
+```
+homelab-iac/
+├── terraform/                    # Infrastructure
+│   ├── main.tf                   # Định nghĩa VMs
+│   ├── provider.tf               # Kết nối ESXi
+│   ├── variables.tf              # Input variables
+│   ├── locals.tf                 # Port groups
+│   ├── outputs.tf                # VM IPs output
+│   ├── terraform.tfvars          # Credentials (gitignored)
+│   └── modules/esxi-vm/          # Reusable VM module
 │
-├── ansible/
-│   ├── ansible.cfg          # Config Ansible
-│   ├── inventory/
-│   │   └── hosts.yml        # Danh sách servers
+├── ansible/                      # Configuration
+│   ├── ansible.cfg               # Ansible settings
+│   ├── inventory/hosts.yml       # Server list
 │   └── playbooks/
-│       └── setup-vm.yml     # Playbook setup VM
+│       ├── setup-vm.yml          # Basic VM config
+│       └── setup-admin-vm.yml    # Admin VM tools
 │
-└── tools/
-    └── ovftool/             # VMware OVF Tool (gitignored)
+├── scripts/                      # Automation
+│   ├── sync-start.sh             # Start Mutagen sync
+│   ├── sync-stop.sh              # Stop sync
+│   ├── remote-apply.sh           # Terraform apply on Admin VM
+│   └── remote-destroy.sh         # Terraform destroy on Admin VM
+│
+├── linux/ovftool/                # OVF Tool cho Admin VM (Linux)
+└── tools/ovftool/                # OVF Tool cho local (macOS)
 ```
 
-### Cài đặt
+### Yêu cầu cài đặt
+
+#### Trên máy Local (macOS)
+
+| Tool      | Cài đặt                                   | Mục đích                    |
+| --------- | ----------------------------------------- | --------------------------- |
+| Terraform | `brew install terraform`                  | Preview changes (plan)      |
+| Ansible   | `brew install ansible`                    | Config VMs                  |
+| Mutagen   | `brew install mutagen-io/mutagen/mutagen` | Sync code với Admin VM      |
+| OVF Tool  | Download → `tools/ovftool/`               | (Optional) Export/Import VM |
+
+#### Trên Admin VM (Ubuntu - tự động cài qua Ansible)
+
+| Tool      | Mục đích                |
+| --------- | ----------------------- |
+| Terraform | Tạo/xóa VMs (nhanh)     |
+| Ansible   | Config VMs              |
+| OVF Tool  | Export/Import templates |
+
+#### Trên Template VM (Ubuntu Server)
+
+```bash
+# Cài trước khi tạo template
+sudo apt update
+sudo apt install -y open-vm-tools openssh-server
+
+# Tạo user
+sudo adduser youruser
+sudo usermod -aG sudo youruser
+echo "youruser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/youruser
+
+# Add SSH key (quan trọng!)
+mkdir -p ~/.ssh
+echo "your-public-key" >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+
+# Netplan cho cả 2 interface (ens36 và ens160)
+sudo tee /etc/netplan/00-dhcp.yaml << 'EOF'
+network:
+  version: 2
+  ethernets:
+    ens36:
+      dhcp4: true
+    ens160:
+      dhcp4: true
+EOF
+sudo netplan apply
+```
+
+### Cài đặt ban đầu
 
 #### 1. Clone repo
 
@@ -84,19 +120,7 @@ git clone <repo-url>
 cd homelab-iac
 ```
 
-#### 2. Cài OVF Tool
-
-Download từ VMware và giải nén vào `tools/ovftool/`, sau đó:
-
-```bash
-# Cho phép chạy (macOS)
-xattr -cr tools/ovftool/
-
-# Tạo symlink
-sudo ln -sf "$(pwd)/tools/ovftool/ovftool" /usr/local/bin/ovftool
-```
-
-#### 3. Config Terraform
+#### 2. Config Terraform
 
 ```bash
 cd terraform
@@ -106,175 +130,181 @@ cp terraform.tfvars.example terraform.tfvars
 Sửa `terraform.tfvars`:
 
 ```hcl
-esxi_hostname = "192.168.1.50"      # IP ESXi server
+esxi_hostname = "192.168.1.50"
 esxi_username = "root"
 esxi_password = "your-password"
-clone_from_vm = "template-vm"       # Tên template VM trên ESXi
+clone_from_vm = "template-vm"    # Tên template trên ESXi
 ```
 
-#### 4. Config Ansible
+#### 3. Config Ansible
 
 ```bash
 cd ansible
 cp inventory/hosts.yml.example inventory/hosts.yml
 ```
 
-Sửa `inventory/hosts.yml` với thông tin VM.
-
-### Chuẩn bị Template VM
-
-Template VM cần có sẵn trên ESXi. Các bước tạo:
-
-1. Tạo VM mới trên ESXi, cài Ubuntu Server
-2. Cài các package cần thiết:
+#### 4. Tạo Admin VM (lần đầu)
 
 ```bash
-sudo apt update
-sudo apt install -y open-vm-tools openssh-server
-```
-
-3. Tạo user và cho phép sudo:
-
-```bash
-sudo adduser youruser
-sudo usermod -aG sudo youruser
-```
-
-4. Shutdown VM và đặt tên (ví dụ: `template-vm`)
-
-### Sử dụng
-
-#### Terraform - Tạo VM
-
-```bash
+# Từ local (chậm nhưng chỉ 1 lần)
 cd terraform
-
-# Khởi tạo
 terraform init
-
-# Xem trước
-terraform plan
-
-# Tạo VM
 terraform apply
 
-# Xem IP của VM
-terraform output
+# Lấy IP của Admin VM
+terraform output admin_ip
+
+# Config Admin VM
+cd ../ansible
+# Sửa IP trong inventory/hosts.yml
+ansible-playbook playbooks/setup-vm.yml -l admin
+ansible-playbook playbooks/setup-admin-vm.yml -l admin
 ```
 
-#### Ansible - Config VM
-
-Sau khi Terraform tạo VM xong:
+#### 5. Setup Mutagen Sync
 
 ```bash
-cd ansible
+# Cài Mutagen
+brew install mutagen-io/mutagen/mutagen
 
-# Update IP trong inventory/hosts.yml
-
-# Chạy playbook
-ansible-playbook playbooks/setup-vm.yml
+# Start sync
+./scripts/sync-start.sh 192.168.1.100 tantai
 ```
 
-### Thêm VM mới
+### Sử dụng hàng ngày
 
-1. Thêm module trong `terraform/main.tf`:
+```bash
+# 1. Start sync (nếu chưa chạy)
+./scripts/sync-start.sh 192.168.1.100 tantai
 
-```hcl
-module "redis" {
-  source = "./modules/esxi-vm"
+# 2. Edit code trên local (tự động sync)
 
-  guest_name     = "redis"
-  clone_from_vm  = var.clone_from_vm
-  disk_store     = var.disk_store
-  numvcpus       = 2
-  memsize        = 2048
-  boot_disk_size = 50
-  network        = local.port_groups.db_network
-}
+# 3. Preview
+terraform plan
+
+# 4. Apply từ Admin VM (nhanh!)
+./scripts/remote-apply.sh 192.168.1.100 tantai
+
+# 5. Stop sync khi xong
+./scripts/sync-stop.sh
 ```
 
-2. Thêm output trong `terraform/outputs.tf`:
+### Network Port Groups
 
-```hcl
-output "redis_ip" {
-  value = module.redis.vm_ip
-}
-```
-
-3. Chạy `terraform apply`
+| Port Group   | Subnet         | Mục đích          |
+| ------------ | -------------- | ----------------- |
+| VM Network   | 192.168.1.0/24 | Management, Admin |
+| DB-Network   | 172.16.19.0/24 | Database servers  |
+| Prod-Network | 172.16.20.0/24 | Production apps   |
 
 ---
 
 ## English
 
-### Table of Contents
+### Overview
 
-- [Introduction](#introduction)
-- [Requirements](#requirements)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Prepare Template VM](#prepare-template-vm)
-- [Usage](#usage)
-  - [Terraform - Create VM](#terraform---create-vm)
-  - [Ansible - Configure VM](#ansible---configure-vm)
-- [Add New VM](#add-new-vm)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              WORKFLOW                                        │
+│                                                                             │
+│   LOCAL MACHINE                    ESXi SERVER (192.168.1.50)               │
+│   ┌─────────────┐                  ┌─────────────────────────────────┐      │
+│   │             │   Mutagen Sync   │  ┌─────────┐    ┌─────────────┐ │      │
+│   │  Kiro IDE   │◄────────────────►│  │ Admin   │───►│ Template VM │ │      │
+│   │             │                  │  │   VM    │    └─────────────┘ │      │
+│   │  - Edit     │                  │  │         │           │        │      │
+│   │  - Plan     │   SSH Commands   │  │ Terraform           ▼        │      │
+│   │  - Git      │─────────────────►│  │ Ansible │    ┌─────────────┐ │      │
+│   │             │                  │  │ OVFTool │───►│  New VMs    │ │      │
+│   └─────────────┘                  │  └─────────┘    └─────────────┘ │      │
+│                                    └─────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### Introduction
+**Why Admin VM?**
 
-This repo manages homelab ESXi server infrastructure as code:
-
-- **Terraform**: Create/destroy VMs on ESXi
-- **Ansible**: Configure VMs (hostname, IP, install services)
-
-### Requirements
-
-#### On local machine (macOS/Linux)
-
-| Tool      | Version | Install                                                                                                 |
-| --------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| Terraform | >= 1.0  | `brew install terraform`                                                                                |
-| Ansible   | >= 2.9  | `brew install ansible`                                                                                  |
-| OVF Tool  | >= 4.0  | [Download from VMware](https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest) |
-
-#### On ESXi server
-
-- ESXi 6.7+ with SSH enabled
-- Datastore with template VM
-- Network port groups created
-
-#### On Template VM
-
-- Ubuntu Server 22.04+ (or other distro)
-- `open-vm-tools` installed (for Terraform to get IP)
-- User with sudo privileges
-- SSH enabled
+The `josenk/esxi` provider downloads template to local then uploads back when cloning → slow. Admin VM sits inside ESXi network, clones directly via internal network → 5-10x faster.
 
 ### Project Structure
 
 ```
-.
-├── terraform/
-│   ├── main.tf              # Define VMs
-│   ├── provider.tf          # ESXi connection
-│   ├── variables.tf         # Input variables
-│   ├── outputs.tf           # Outputs (VM IPs)
-│   ├── locals.tf            # Fixed values (port groups)
-│   ├── terraform.tfvars     # Actual values (gitignored)
-│   └── modules/
-│       └── esxi-vm/         # Reusable module
+homelab-iac/
+├── terraform/                    # Infrastructure
+│   ├── main.tf                   # VM definitions
+│   ├── provider.tf               # ESXi connection
+│   ├── variables.tf              # Input variables
+│   ├── locals.tf                 # Port groups
+│   ├── outputs.tf                # VM IPs output
+│   ├── terraform.tfvars          # Credentials (gitignored)
+│   └── modules/esxi-vm/          # Reusable VM module
 │
-├── ansible/
-│   ├── ansible.cfg          # Ansible config
-│   ├── inventory/
-│   │   └── hosts.yml        # Server list
+├── ansible/                      # Configuration
+│   ├── ansible.cfg               # Ansible settings
+│   ├── inventory/hosts.yml       # Server list
 │   └── playbooks/
-│       └── setup-vm.yml     # VM setup playbook
+│       ├── setup-vm.yml          # Basic VM config
+│       └── setup-admin-vm.yml    # Admin VM tools
 │
-└── tools/
-    └── ovftool/             # VMware OVF Tool (gitignored)
+├── scripts/                      # Automation
+│   ├── sync-start.sh             # Start Mutagen sync
+│   ├── sync-stop.sh              # Stop sync
+│   ├── remote-apply.sh           # Terraform apply on Admin VM
+│   └── remote-destroy.sh         # Terraform destroy on Admin VM
+│
+├── linux/ovftool/                # OVF Tool for Admin VM (Linux)
+└── tools/ovftool/                # OVF Tool for local (macOS)
 ```
 
-### Installation
+### Requirements
+
+#### On Local Machine (macOS)
+
+| Tool      | Install                                   | Purpose                     |
+| --------- | ----------------------------------------- | --------------------------- |
+| Terraform | `brew install terraform`                  | Preview changes (plan)      |
+| Ansible   | `brew install ansible`                    | Configure VMs               |
+| Mutagen   | `brew install mutagen-io/mutagen/mutagen` | Sync code with Admin VM     |
+| OVF Tool  | Download → `tools/ovftool/`               | (Optional) Export/Import VM |
+
+#### On Admin VM (Ubuntu - auto-installed via Ansible)
+
+| Tool      | Purpose                   |
+| --------- | ------------------------- |
+| Terraform | Create/destroy VMs (fast) |
+| Ansible   | Configure VMs             |
+| OVF Tool  | Export/Import templates   |
+
+#### On Template VM (Ubuntu Server)
+
+```bash
+# Install before creating template
+sudo apt update
+sudo apt install -y open-vm-tools openssh-server
+
+# Create user
+sudo adduser youruser
+sudo usermod -aG sudo youruser
+echo "youruser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/youruser
+
+# Add SSH key (important!)
+mkdir -p ~/.ssh
+echo "your-public-key" >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+
+# Netplan for both interfaces (ens36 and ens160)
+sudo tee /etc/netplan/00-dhcp.yaml << 'EOF'
+network:
+  version: 2
+  ethernets:
+    ens36:
+      dhcp4: true
+    ens160:
+      dhcp4: true
+EOF
+sudo netplan apply
+```
+
+### Initial Setup
 
 #### 1. Clone repo
 
@@ -283,19 +313,7 @@ git clone <repo-url>
 cd homelab-iac
 ```
 
-#### 2. Install OVF Tool
-
-Download from VMware and extract to `tools/ovftool/`, then:
-
-```bash
-# Allow execution (macOS)
-xattr -cr tools/ovftool/
-
-# Create symlink
-sudo ln -sf "$(pwd)/tools/ovftool/ovftool" /usr/local/bin/ovftool
-```
-
-#### 3. Configure Terraform
+#### 2. Configure Terraform
 
 ```bash
 cd terraform
@@ -305,99 +323,76 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars`:
 
 ```hcl
-esxi_hostname = "192.168.1.50"      # ESXi server IP
+esxi_hostname = "192.168.1.50"
 esxi_username = "root"
 esxi_password = "your-password"
-clone_from_vm = "template-vm"       # Template VM name on ESXi
+clone_from_vm = "template-vm"    # Template name on ESXi
 ```
 
-#### 4. Configure Ansible
+#### 3. Configure Ansible
 
 ```bash
 cd ansible
 cp inventory/hosts.yml.example inventory/hosts.yml
 ```
 
-Edit `inventory/hosts.yml` with VM information.
-
-### Prepare Template VM
-
-Template VM must exist on ESXi. Steps to create:
-
-1. Create new VM on ESXi, install Ubuntu Server
-2. Install required packages:
+#### 4. Create Admin VM (first time only)
 
 ```bash
-sudo apt update
-sudo apt install -y open-vm-tools openssh-server
-```
-
-3. Create user with sudo:
-
-```bash
-sudo adduser youruser
-sudo usermod -aG sudo youruser
-```
-
-4. Shutdown VM and name it (e.g., `template-vm`)
-
-### Usage
-
-#### Terraform - Create VM
-
-```bash
+# From local (slow but only once)
 cd terraform
-
-# Initialize
 terraform init
-
-# Preview
-terraform plan
-
-# Create VM
 terraform apply
 
-# View VM IP
-terraform output
+# Get Admin VM IP
+terraform output admin_ip
+
+# Configure Admin VM
+cd ../ansible
+# Update IP in inventory/hosts.yml
+ansible-playbook playbooks/setup-vm.yml -l admin
+ansible-playbook playbooks/setup-admin-vm.yml -l admin
 ```
 
-#### Ansible - Configure VM
-
-After Terraform creates VM:
+#### 5. Setup Mutagen Sync
 
 ```bash
-cd ansible
+# Install Mutagen
+brew install mutagen-io/mutagen/mutagen
 
-# Update IP in inventory/hosts.yml
-
-# Run playbook
-ansible-playbook playbooks/setup-vm.yml
+# Start sync
+./scripts/sync-start.sh 192.168.1.100 tantai
 ```
 
-### Add New VM
+### Daily Usage
 
-1. Add module in `terraform/main.tf`:
+```bash
+# 1. Start sync (if not running)
+./scripts/sync-start.sh 192.168.1.100 tantai
 
-```hcl
-module "redis" {
-  source = "./modules/esxi-vm"
+# 2. Edit code locally (auto-syncs)
 
-  guest_name     = "redis"
-  clone_from_vm  = var.clone_from_vm
-  disk_store     = var.disk_store
-  numvcpus       = 2
-  memsize        = 2048
-  boot_disk_size = 50
-  network        = local.port_groups.db_network
-}
+# 3. Preview
+terraform plan
+
+# 4. Apply from Admin VM (fast!)
+./scripts/remote-apply.sh 192.168.1.100 tantai
+
+# 5. Stop sync when done
+./scripts/sync-stop.sh
 ```
 
-2. Add output in `terraform/outputs.tf`:
+### Network Port Groups
 
-```hcl
-output "redis_ip" {
-  value = module.redis.vm_ip
-}
-```
+| Port Group   | Subnet         | Purpose           |
+| ------------ | -------------- | ----------------- |
+| VM Network   | 192.168.1.0/24 | Management, Admin |
+| DB-Network   | 172.16.19.0/24 | Database servers  |
+| Prod-Network | 172.16.20.0/24 | Production apps   |
 
-3. Run `terraform apply`
+---
+
+## Tài liệu bổ sung / Additional Docs
+
+- [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
+- [Mutagen - Cơ chế hoạt động / How it works](documents/mutagen.md)

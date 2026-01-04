@@ -46,7 +46,8 @@ ansible/inventory/hosts.yml
 
 # ===== Tools =====
 tools/
-
+linux/
+linux/
 
 # ===== Logs =====
 *.log
