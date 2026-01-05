@@ -1,0 +1,182 @@
+---
+# Playbook: Setup MinIO + Zot Registry
+
+- name: Setup Object Storage (MinIO + Zot Registry)
+  hosts: storage_servers
+  become: yes
+
+  vars:
+    storage_data_path: "/mnt/storage_data"
+    storage_stack_path: "/mnt/storage_data/storage-stack"
+    minio_root_user: "tantai"
+    minio_root_password: "21042004"
+    zot_auth_user: "tantai"
+    zot_auth_password: "21042004"
+
+  tasks:
+    # ===== System Optimization =====
+    - name: Configure kernel for storage I/O optimization
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: "vm.swappiness", value: "10" }
+        - { name: "vm.dirty_ratio", value: "15" }
+        - { name: "vm.dirty_background_ratio", value: "5" }
+
+    # ===== Docker Installation =====
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker from Ubuntu repository
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+    # ===== Format and Mount Data Disk =====
+    - name: Check if data disk is formatted
+      command: blkid {{ data_disk_device }}
+      register: blkid_result
+      failed_when: false
+      changed_when: false
+
+    - name: Format data disk with XFS
+      filesystem:
+        fstype: xfs
+        dev: "{{ data_disk_device }}"
+      when: blkid_result.rc != 0
+
+    - name: Create mount point
+      file:
+        path: "{{ storage_data_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount data disk
+      mount:
+        path: "{{ storage_data_path }}"
+        src: "{{ data_disk_device }}"
+        fstype: xfs
+        opts: defaults,noatime
+        state: mounted
+
+    # ===== Configure Docker Daemon =====
+    - name: Create Docker daemon config
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "storage-driver": "overlay2",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+        mode: "0644"
+      notify: Restart Docker
+
+    # ===== Create Storage Stack Directory =====
+    - name: Create storage stack directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ storage_stack_path }}"
+        - "{{ storage_stack_path }}/config"
+    # ===== Copy Configuration Files =====
+    - name: Copy environment file
+      template:
+        src: ../templates/minio/.env.j2
+        dest: "{{ storage_stack_path }}/.env"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy docker-compose.yml
+      template:
+        src: ../templates/minio/docker-compose.yml.j2
+        dest: "{{ storage_stack_path }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Copy Zot config
+      template:
+        src: ../templates/minio/zot-config.json.j2
+        dest: "{{ storage_stack_path }}/zot-config.json"
+        mode: "0644"
+
+    - name: Create Zot htpasswd file
+      shell: |
+        docker run --rm httpd:2.4-alpine htpasswd -Bbn {{ zot_auth_user }} {{ zot_auth_password }} > {{ storage_stack_path }}/htpasswd
+      args:
+        creates: "{{ storage_stack_path }}/htpasswd"
+
+    # ===== Start Object Storage Services =====
+    - name: Stop existing containers
+      shell: |
+        cd {{ storage_stack_path }}
+        docker-compose down || true
+      register: docker_stop_result
+
+    - name: Start MinIO + Zot containers
+      shell: |
+        cd {{ storage_stack_path }}
+        docker-compose up -d
+      register: docker_compose_result
+
+    - name: Wait for MinIO to be ready
+      wait_for:
+        port: 9000
+        delay: 10
+        timeout: 60
+
+    - name: Wait for Zot Registry to be ready
+      wait_for:
+        port: 5000
+        delay: 5
+        timeout: 60
+
+    - name: Show services status
+      debug:
+        msg: |
+          Object Storage Services are running!
+
+          MinIO Console: http://{{ ansible_host }}:9001
+          MinIO API: http://{{ ansible_host }}:9000
+          Zot Registry: http://{{ ansible_host }}:5000
+
+          Data path: {{ storage_stack_path }}
+
+          MinIO Login: {{ minio_root_user }} / {{ minio_root_password }}
+          Zot Registry Login: {{ zot_auth_user }} / {{ zot_auth_password }}
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted

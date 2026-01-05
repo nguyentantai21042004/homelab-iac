@@ -6,6 +6,8 @@ provider "registry.terraform.io/josenk/esxi" {
   constraints = "1.10.3"
   hashes = [
     "h1:fFWIjKsi+/zfrVBpEdtiaTWApT3HtzujU+/ew1TajZY=",
+    "h1:o78ERC8riDT2nHWCbXECt+S/RKwM98/G5ZojJHRm8fA=",
+    "h1:tWIcFuIQhIpinoGOEwZMYyHgT+2Cl+KcgZHk2t+HZbQ=",
     "zh:208a6a8092fa50d63fe1780447f2c4c3115b1987902a0c986452172c2c35677e",
     "zh:3a0755aec960e32dbfbb31be61bba6ee2d11aff0513707e93f4eaebe3d557d93",
     "zh:3daef19f36c9438771833dc15ae0eddc95faf9df00f9de9ab143bd031314ce50",

@@ -2,6 +2,7 @@
 # Playbook: Basic VM Setup
 # - Set hostname
 # - Config static IP
+# - Set timezone to Asia/Ho_Chi_Minh (UTC+7)
 # - Mount data disk (if exists)
 
 - name: Setup VM
@@ -9,6 +10,14 @@
   become: yes
 
   tasks:
+    # ===== Timezone =====
+    - name: Set timezone to Asia/Ho_Chi_Minh (UTC+7)
+      timezone:
+        name: Asia/Ho_Chi_Minh
+
+    - name: Sync system time
+      command: timedatectl set-ntp true
+
     # ===== Hostname =====
     - name: Set hostname
       hostname:

@@ -12,7 +12,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              WORKFLOW                                        │
+│                              WORKFLOW                                       │
 │                                                                             │
 │   LOCAL MACHINE                    ESXi SERVER (192.168.1.50)               │
 │   ┌─────────────┐                  ┌─────────────────────────────────┐      │
@@ -205,7 +205,7 @@ terraform plan
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              WORKFLOW                                        │
+│                              WORKFLOW                                       │
 │                                                                             │
 │   LOCAL MACHINE                    ESXi SERVER (192.168.1.50)               │
 │   ┌─────────────┐                  ┌─────────────────────────────────┐      │
@@ -396,4 +396,6 @@ terraform plan
 
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
 - [PostgreSQL Server Setup](documents/postgres.md)
+- [MinIO + Zot Registry Setup](documents/minio-zot.md)
+- [Jinja2 Templates Guide](documents/jinja2-templates.md)
 - [Mutagen - Cơ chế hoạt động / How it works](documents/mutagen.md)

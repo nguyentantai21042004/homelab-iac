@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-03-30T09-41-56Z
+    container_name: minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - /mnt/minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  createbuckets:
+    image: minio/mc:RELEASE.2024-02-24T01-33-20Z
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb --ignore-existing myminio/zot-registry;
+      exit 0;
+      "
+
+  zot:
+    image: {{ zot_image | default('ghcr.io/project-zot/zot-linux-amd64:v2.1.1') }}
+    container_name: zot-registry
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./zot-config.json:/etc/zot/config.json:ro
+      - ./htpasswd:/etc/zot/htpasswd:ro
+    depends_on:
+      - minio
+      - createbuckets
+    command: ["serve", "/etc/zot/config.json"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/v2/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
