@@ -1,0 +1,70 @@
+http:
+  routers:
+    # Traefik Dashboard
+    traefik-dashboard:
+      rule: "Host(`dashboard.tantai.dev`)"
+      service: api@internal
+      entryPoints:
+        - websecure
+      middlewares:
+        - traefik-auth
+      tls:
+        certResolver: letsencrypt
+
+    # MinIO Console (Storage UI)
+    storage-ui:
+      rule: "Host(`storage.tantai.dev`)"
+      service: storage-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - storage-headers
+      tls:
+        certResolver: letsencrypt
+
+    # ZOT Registry
+    registry-ui:
+      rule: "Host(`registry.tantai.dev`)"
+      service: registry-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - registry-headers
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    storage-service:
+      loadBalancer:
+        servers:
+          - url: "http://{{ storage_backend_ip | default('172.16.20.10') }}:9001"
+
+    registry-service:
+      loadBalancer:
+        servers:
+          - url: "http://{{ storage_backend_ip | default('172.16.20.10') }}:5000"
+
+  middlewares:
+    # Basic Auth for Traefik Dashboard
+    traefik-auth:
+      basicAuth:
+        users:
+          - "{{ traefik_dashboard_user | default('admin') }}:{{ traefik_dashboard_password_hash | default('') }}"
+
+    # Headers for MinIO Console
+    storage-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+          X-Frame-Options: "SAMEORIGIN"
+
+    # Headers for ZOT Registry
+    registry-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+

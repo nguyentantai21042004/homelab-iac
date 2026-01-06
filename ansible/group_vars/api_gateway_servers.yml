@@ -1,0 +1,12 @@
+# API Gateway (Traefik) configuration
+traefik_stack_path: "/opt/traefik"
+
+# Let's Encrypt email
+traefik_acme_email: "nguyentantai.dev@gmail.com"
+
+# Traefik Dashboard credentials
+traefik_dashboard_user: "tantai"
+traefik_dashboard_password: "{{ vault_traefik_dashboard_password }}"
+
+# Backend services IP addresses
+storage_backend_ip: "172.16.21.10"

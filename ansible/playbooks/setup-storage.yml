@@ -4,8 +4,9 @@
 - name: Setup Object Storage (MinIO + Zot Registry)
   hosts: storage_servers
   become: yes
-
-  vars:
+  vars_files:
+    - ../group_vars/storage_servers.yml
+    - ../group_vars/all/vault.yml
 
   tasks:
     # ===== System Optimization =====

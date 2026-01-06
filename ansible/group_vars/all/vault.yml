@@ -9,3 +9,6 @@ vault_minio_password: "21042004!"
 
 # Zot Registry passwords
 vault_zot_password: "21042004!"
+
+# Traefik Dashboard password
+vault_traefik_dashboard_password: "21042004!"

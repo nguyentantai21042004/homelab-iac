@@ -1,0 +1,185 @@
+---
+# Playbook: Setup API Gateway (Traefik)
+# Deploy Traefik as reverse proxy and API Gateway
+
+- name: Setup API Gateway (Traefik)
+  hosts: api_gateway_servers
+  become: yes
+  vars_files:
+    - ../group_vars/api_gateway_servers.yml
+    - ../group_vars/all/vault.yml
+
+  tasks:
+    - name: Resolve effective variables
+      set_fact:
+        tf_stack: "{{ traefik_stack_path | default('/opt/traefik') }}"
+        tf_user: "{{ traefik_dashboard_user | default('admin') }}"
+        tf_pass: "{{ traefik_dashboard_password | default(vault_traefik_dashboard_password | default('changeme123')) }}"
+        tf_acme_email: "{{ traefik_acme_email | default('nguyentantai.dev@gmail.com') }}"
+        tf_storage_ip: "{{ storage_backend_ip | default('172.16.20.10') }}"
+
+    - name: Debug effective auth
+      debug:
+        msg: "tf_user={{ tf_user }}, tf_pass={{ tf_pass }}"
+      changed_when: false
+
+    # ===== Docker Installation =====
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker from Ubuntu repository
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # ===== Configure Docker Daemon =====
+    - name: Create Docker daemon config
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "storage-driver": "overlay2",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+        mode: "0644"
+      notify: Restart Docker
+
+    # ===== Create Traefik Directory Structure =====
+    - name: Create Traefik directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      loop:
+        - "{{ tf_stack }}"
+        - "{{ tf_stack }}/config"
+
+    # ===== Generate htpasswd for Traefik Dashboard =====
+    - name: Generate htpasswd file for Traefik Dashboard (overwrite each run)
+      shell: |
+        docker run --rm httpd:2.4-alpine htpasswd -Bbn {{ tf_user }} {{ tf_pass }} > {{ tf_stack }}/htpasswd
+      register: htpasswd_result
+
+    - name: Set htpasswd file permissions
+      file:
+        path: "{{ tf_stack }}/htpasswd"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    # ===== Extract password hash from htpasswd =====
+    - name: Read htpasswd file to get password hash
+      slurp:
+        src: "{{ tf_stack }}/htpasswd"
+      register: htpasswd_content
+
+    - name: Extract password hash
+      set_fact:
+        traefik_dashboard_password_hash: "{{ htpasswd_content.content | b64decode | regex_replace('^[^:]+:', '') | trim }}"
+
+    # ===== Copy Traefik Configuration Files =====
+    - name: Copy traefik.yml static config
+      template:
+        src: ../templates/traefik/traefik.yml.j2
+        dest: "{{ tf_stack }}/config/traefik.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      vars:
+        traefik_acme_email: "{{ tf_acme_email }}"
+
+    - name: Copy dynamic_conf.yml
+      template:
+        src: ../templates/traefik/dynamic_conf.yml.j2
+        dest: "{{ tf_stack }}/config/dynamic_conf.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      vars:
+        traefik_dashboard_user: "{{ tf_user }}"
+        traefik_dashboard_password_hash: "{{ traefik_dashboard_password_hash }}"
+        storage_backend_ip: "{{ tf_storage_ip }}"
+
+    - name: Copy docker-compose.yml
+      template:
+        src: ../templates/traefik/docker-compose.yml.j2
+        dest: "{{ tf_stack }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    # ===== Create acme.json for Let's Encrypt =====
+    - name: Create acme.json file
+      file:
+        path: "{{ tf_stack }}/acme.json"
+        state: touch
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    # ===== Start Traefik Container =====
+    - name: Stop existing Traefik containers
+      shell: |
+        cd {{ tf_stack }}
+        docker-compose down || true
+      register: docker_stop_result
+
+    - name: Start Traefik container
+      shell: |
+        cd {{ tf_stack }}
+        docker-compose up -d
+      register: docker_compose_result
+
+    - name: Wait for Traefik to be ready
+      wait_for:
+        port: 80
+        delay: 5
+        timeout: 60
+
+    - name: Show Traefik status
+      debug:
+        msg: |
+          Traefik API Gateway is running!
+
+          Dashboard: https://dashboard.tantai.dev
+          Storage UI: https://storage.tantai.dev
+          Registry UI: https://registry.tantai.dev
+
+          Traefik Dashboard Login: {{ tf_user }} / {{ tf_pass }}
+
+          Config path: {{ tf_stack }}
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted

@@ -1,0 +1,35 @@
+api:
+  dashboard: true
+  insecure: false # Disable insecure access, use router instead
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+  websecure:
+    address: ":443"
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic_conf.yml
+    watch: true # Auto-reload on config changes
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: {{ traefik_acme_email | default('nguyentantai.dev@gmail.com') }}
+      storage: /acme.json
+      httpChallenge:
+        entryPoint: web
+
+log:
+  level: INFO
+  format: json
+
+accessLog: {}
+
