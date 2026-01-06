@@ -30,3 +30,22 @@ variable "disk_store" {
   type    = string
   default = "datastore1"
 }
+
+# ===== K3s Cluster Config =====
+variable "k3s_node_count" {
+  type        = number
+  default     = 3
+  description = "Number of K3s cluster nodes"
+}
+
+variable "k3s_vm_specs" {
+  type = object({
+    cpu = number
+    ram = number
+  })
+  default = {
+    cpu = 4
+    ram = 6144 # 6GB (Rancher + Longhorn + headroom)
+  }
+  description = "K3s node VM specifications"
+}

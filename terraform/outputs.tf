@@ -13,3 +13,8 @@ output "storage_ip" {
 output "api_gateway_ip" {
   value = module.api_gateway.vm_ip
 }
+
+output "k3s_ips" {
+  value       = [for node in module.k3s_nodes : node.vm_ip]
+  description = "K3s cluster node IPs"
+}

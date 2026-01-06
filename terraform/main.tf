@@ -47,3 +47,17 @@ module "api_gateway" {
   memsize       = 2048 # 2GB RAM
   network       = local.port_groups.vm_network
 }
+
+# ===== K3s Cluster Nodes (Converged: Master + Worker) =====
+module "k3s_nodes" {
+  source = "./modules/esxi-vm"
+  count  = var.k3s_node_count
+
+  guest_name     = "k3s-${format("%02d", count.index + 1)}"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = var.k3s_vm_specs.cpu
+  memsize        = var.k3s_vm_specs.ram
+  data_disk_size = 50 # 50GB for Longhorn storage
+  network        = local.port_groups.prod_network
+}
