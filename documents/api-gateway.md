@@ -117,7 +117,66 @@ registry.tantai.dev   → 192.168.1.101
 
 - URL: `https://dashboard.tantai.dev`
 - Login: `admin` / password từ `vault_traefik_dashboard_password`
-- Xem tất cả routes, services, middlewares đang chạy
+
+### Hướng dẫn sử dụng Dashboard
+
+Dashboard cung cấp cái nhìn toàn cảnh về "sức khỏe" của hệ thống Gateway mà không cần dùng command line.
+
+#### 1. Trang Tổng quan (Overview)
+
+![Dashboard Overview](images/traefik-dashboard-overview.png)
+
+| Thành phần      | Mô tả                                                                             |
+| --------------- | --------------------------------------------------------------------------------- |
+| **Entrypoints** | Các cổng Traefik đang lắng nghe: `:80` (Web) và `:443` (Websecure)                |
+| **Routers**     | Số lượng quy tắc điều hướng và trạng thái (ví dụ: 5 HTTP Router đều Success 100%) |
+| **Services**    | Số lượng dịch vụ backend đang chạy                                                |
+| **Middlewares** | Số bộ lọc xử lý trung gian (Auth, Headers, Compress...)                           |
+| **Features**    | Trạng thái AccessLog, Tracing, Metrics                                            |
+
+#### 2. HTTP Routers (Bản đồ điều hướng)
+
+![HTTP Routers](images/traefik-http-routers.png)
+
+Đây là phần quan trọng nhất để quản lý API Gateway:
+
+| Cột             | Ý nghĩa                                                  |
+| --------------- | -------------------------------------------------------- |
+| **Status**      | ✓ Xanh = Router hoạt động bình thường                    |
+| **TLS**         | 🛡️ Xanh = HTTPS hợp lệ với Let's Encrypt                 |
+| **Rule**        | Điều kiện kích hoạt, ví dụ: `Host('storage.tantai.dev')` |
+| **Entrypoints** | Request đi vào từ cổng nào (`websecure` = 443)           |
+| **Service**     | Backend đích nhận request                                |
+| **Priority**    | Độ ưu tiên khi có nhiều rule chồng chéo                  |
+
+#### 3. Services (Backend Health)
+
+![Services](images/traefik-services.png)
+
+Xem trạng thái các backend:
+
+- **Load Balancer URL**: Địa chỉ IP:Port của backend
+- **Health Status**: Xanh = healthy, Đỏ = unhealthy (giúp debug nhanh)
+
+#### 4. Middlewares (Bộ lọc)
+
+![Middlewares](images/traefik-middlewares.png)
+
+Danh sách các middleware đang hoạt động:
+
+- **BasicAuth**: Xác thực cho Dashboard
+- **Headers**: Thêm security headers
+- **Compress**: Nén response
+
+#### 5. Chi tiết Router
+
+![Router Detail](images/traefik-router-detail.png)
+
+Click vào router để xem:
+
+- Middleware chain đang áp dụng
+- TLS certificate info
+- Service loadbalancer config
 
 #### MinIO Console
 
