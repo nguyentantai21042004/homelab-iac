@@ -1,0 +1,54 @@
+version: "3"
+
+services:
+    # Woodpecker Server - Control Plane
+    woodpecker-server:
+        # [STABLE STRATEGY] Pin major version to avoid breaking changes
+        image: woodpeckerci/woodpecker-server:{{ woodpecker_version }}
+        container_name: woodpecker-server
+        restart: always
+        ports:
+        - "8000:8000"
+        environment:
+        - WOODPECKER_OPEN=true
+        - WOODPECKER_HOST=https://ci.tantai.dev
+        # GitHub OAuth
+        - WOODPECKER_GITHUB=true
+        - WOODPECKER_GITHUB_CLIENT={{ woodpecker_github_client }}
+        - WOODPECKER_GITHUB_SECRET={{ woodpecker_github_secret }}
+        # PostgreSQL Backend (faster & more stable than SQLite)
+        - WOODPECKER_DATABASE_DRIVER=postgres
+        - WOODPECKER_DATABASE_DATASOURCE=postgres://{{ woodpecker_db_user }}:{{ woodpecker_db_password }}@{{ woodpecker_db_host }}:5432/{{ woodpecker_db_name }}?sslmode=disable
+        # Admin User
+        - WOODPECKER_ADMIN={{ woodpecker_admin_user }}
+        # Agent Secret (for agent authentication)
+        - WOODPECKER_AGENT_SECRET={{ woodpecker_agent_secret }}
+
+    # Woodpecker Agent - Build Worker
+    woodpecker-agent:
+        # [STABLE STRATEGY] Agent must match Server major version
+        image: woodpeckerci/woodpecker-agent:{{ woodpecker_version }}
+        container_name: woodpecker-agent
+        restart: always
+        depends_on:
+        - woodpecker-server
+        volumes:
+        # DooD (Docker-outside-of-Docker) - Share Docker socket
+        # Leverage Docker layer cache on Host -> Super fast builds
+        - /var/run/docker.sock:/var/run/docker.sock
+        environment:
+        - WOODPECKER_SERVER=woodpecker-server:9000
+        - WOODPECKER_AGENT_SECRET={{ woodpecker_agent_secret }}
+        - WOODPECKER_MAX_PROCS={{ woodpecker_max_procs }}
+        # Allow build containers to see other services in host network
+        - WOODPECKER_BACKEND_DOCKER_NETWORK_MODE=bridge
+
+    # Auto Cleanup - Garbage Collection to prevent disk full
+    docker-gc:
+        image: clockworksoul/docker-gc-cron:latest
+        container_name: docker-gc
+        restart: always
+        volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        environment:
+        - CRON=0 3 * * *  # Run at 3 AM daily

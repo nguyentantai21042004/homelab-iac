@@ -31,8 +31,8 @@ module "storage" {
   clone_from_vm  = var.clone_from_vm
   disk_store     = var.disk_store
   numvcpus       = 3
-  memsize        = 6144 # 6GB RAM
-  data_disk_size = 100  # 100GB data disk
+  memsize        = 6144 
+  data_disk_size = 100  
   network        = local.port_groups.prod_network
 }
 
@@ -56,7 +56,7 @@ module "localstack" {
   clone_from_vm  = var.clone_from_vm
   disk_store     = var.disk_store
   numvcpus       = 4 
-  memsize        = 8192  # 8GB RAM
+  memsize        = 8192  
   data_disk_size = 100   
   network        = local.port_groups.prod_network 
 }
@@ -72,5 +72,18 @@ module "k3s_nodes" {
   numvcpus       = var.k3s_vm_specs.cpu
   memsize        = var.k3s_vm_specs.ram
   data_disk_size = 50 # 50GB for Longhorn storage
+  network        = local.port_groups.prod_network
+}
+
+# ===== CI/CD VM (Woodpecker) =====
+module "cicd" {
+  source = "./modules/esxi-vm"
+
+  guest_name     = "cicd"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = 4
+  memsize        = 8192
+  data_disk_size = 50
   network        = local.port_groups.prod_network
 }

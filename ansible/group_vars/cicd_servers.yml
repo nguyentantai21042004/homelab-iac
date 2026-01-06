@@ -1,0 +1,25 @@
+# Woodpecker CI Configuration
+woodpecker_stack_path: "/opt/woodpecker"
+
+# Version Strategy: Pin specific version to avoid breaking changes
+# Check latest at: https://github.com/woodpecker-ci/woodpecker/releases
+woodpecker_version: "v3.12.0"
+
+# GitHub OAuth (secrets from vault)
+woodpecker_github_client: "{{ vault_woodpecker_github_client }}"
+woodpecker_github_secret: "{{ vault_woodpecker_github_secret }}"
+woodpecker_admin_user: "{{ vault_woodpecker_admin_user }}"
+
+# Database connection
+woodpecker_db_user: "woodpecker_master"
+woodpecker_db_password: "{{ vault_woodpecker_db_password }}"
+woodpecker_db_host: "172.16.19.10" # PostgreSQL VM IP
+woodpecker_db_name: "woodpecker"
+
+# Agent settings
+woodpecker_agent_secret: "{{ vault_woodpecker_agent_secret }}"
+woodpecker_max_procs: 4 # Max parallel builds
+
+# Zot Registry (insecure if no SSL)
+zot_registry_ip: "172.16.21.10"
+zot_registry_port: "5000"

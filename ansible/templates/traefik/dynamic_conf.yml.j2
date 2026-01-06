@@ -33,6 +33,15 @@ http:
       tls:
         certResolver: letsencrypt
 
+    # Woodpecker CI
+    woodpecker-ci:
+      rule: "Host(`ci.tantai.dev`)"
+      service: woodpecker-service
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
   services:
     storage-service:
       loadBalancer:
@@ -43,6 +52,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://{{ storage_backend_ip | default('172.16.21.10') }}:5000"
+
+    woodpecker-service:
+      loadBalancer:
+        servers:
+          - url: "http://{{ woodpecker_ip | default('172.16.21.21') }}:8000"
 
   middlewares:
     # Basic Auth for Traefik Dashboard

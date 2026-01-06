@@ -22,3 +22,7 @@ output "k3s_ips" {
 output "localstack_ip" {
   value = module.localstack.vm_ip
 }
+
+output "cicd_ip" {
+  value = module.cicd.vm_ip
+}

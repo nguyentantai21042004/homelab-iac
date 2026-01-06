@@ -13,3 +13,6 @@ storage_backend_ip: "172.16.21.10"
 
 # LocalStack IP
 localstack_ip: "172.16.21.20"
+
+# Woodpecker CI IP
+woodpecker_ip: "172.16.21.21"
