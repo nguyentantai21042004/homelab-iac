@@ -48,6 +48,19 @@ module "api_gateway" {
   network       = local.port_groups.vm_network
 }
 
+# ===== LocalStack VM =====
+module "localstack" {
+  source = "./modules/esxi-vm"
+
+  guest_name     = "localstack"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = 4 
+  memsize        = 8192  # 8GB RAM
+  data_disk_size = 100   
+  network        = local.port_groups.prod_network 
+}
+
 # ===== K3s Cluster Nodes (Converged: Master + Worker) =====
 module "k3s_nodes" {
   source = "./modules/esxi-vm"

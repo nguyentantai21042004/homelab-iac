@@ -9,8 +9,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./config/dynamic_conf.yml:/etc/traefik/dynamic_conf.yml:ro
+      - ./config:/etc/traefik:ro
       - ./acme.json:/acme.json
     networks:
       - traefik-network

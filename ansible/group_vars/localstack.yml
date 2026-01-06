@@ -1,0 +1,1 @@
+localstack_api_key: "{{ vault_localstack_api_key }}"

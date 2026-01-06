@@ -1,0 +1,144 @@
+---
+# Playbook: Setup LocalStack Pro
+# Optimal setup for High Performance & Persistence
+
+- name: Setup LocalStack Pro
+  hosts: localstack
+  become: yes
+  vars:
+    localstack_stack_path: "/opt/localstack"
+    data_disk_device: "/dev/sdb"
+    data_disk_device: "/dev/sdb"
+    data_mount_point: "/mnt/data"
+
+  vars_files:
+    - ../group_vars/all/vault.yml
+    - ../group_vars/localstack.yml
+
+  tasks:
+    # ===== 1. Kernel Tuning (Critical for LocalStack/Elasticsearch) =====
+    - name: Configure kernel parameters for performance
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        # Increase File Descriptors
+        - { name: "fs.file-max", value: "2097152" }
+        # Elasticsearch requirement
+        - { name: "vm.max_map_count", value: "262144" }
+        # Network tuning
+        - { name: "net.core.somaxconn", value: "65535" }
+        - { name: "net.ipv4.ip_local_port_range", value: "1024 65000" }
+
+    # ===== 2. Storage Strategy (Separate Data Disk) =====
+    - name: Check if data disk is formatted
+      command: blkid {{ data_disk_device }}
+      register: blkid_result
+      failed_when: false
+      changed_when: false
+
+    - name: Format data disk with XFS
+      filesystem:
+        fstype: xfs
+        dev: "{{ data_disk_device }}"
+      when: blkid_result.rc != 0
+
+    - name: Create mount point
+      file:
+        path: "{{ data_mount_point }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount data disk
+      mount:
+        path: "{{ data_mount_point }}"
+        src: "{{ data_disk_device }}"
+        fstype: xfs
+        opts: defaults,noatime
+        state: mounted
+
+    # ===== 3. Docker Installation & Tuning =====
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+
+    - name: Create custom Docker daemon config (Move Root to Data Disk)
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "data-root": "{{ data_mount_point }}/docker",
+            "storage-driver": "overlay2",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "50m",
+              "max-file": "3"
+            }
+          }
+        mode: "0644"
+      notify: Restart Docker
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # Force restart to apply data-root change immediately if needed
+    - name: Ensure Docker is running with new config
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # ===== 4. Deploy LocalStack =====
+    - name: Create LocalStack directory
+      file:
+        path: "{{ localstack_stack_path }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy docker-compose.yml
+      template:
+        src: ../templates/localstack/docker-compose.yml.j2
+        dest: "{{ localstack_stack_path }}/docker-compose.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Start LocalStack Pro
+      shell: |
+        cd {{ localstack_stack_path }}
+        docker-compose up -d
+      register: docker_up_result
+      changed_when: "'Creating' in docker_up_result.stderr or 'Recreating' in docker_up_result.stderr"
+
+    - name: Wait for LocalStack to be ready
+      wait_for:
+        port: 4566
+        delay: 10
+        timeout: 120
+
+  handlers:
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted

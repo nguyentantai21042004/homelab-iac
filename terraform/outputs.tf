@@ -18,3 +18,7 @@ output "k3s_ips" {
   value       = [for node in module.k3s_nodes : node.vm_ip]
   description = "K3s cluster node IPs"
 }
+
+output "localstack_ip" {
+  value = module.localstack.vm_ip
+}

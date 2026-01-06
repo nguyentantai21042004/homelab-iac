@@ -1,0 +1,42 @@
+http:
+  routers:
+    # Router for LocalStack main endpoint (aws.lab)
+    to-localstack:
+      rule: "Host(`aws.lab`)"
+      service: localstack-svc
+      entryPoints: ["web", "websecure"]
+      tls: {}
+
+    # Router for S3 subdomain (s3.aws.lab)
+    to-localstack-s3:
+      rule: "Host(`s3.aws.lab`)"
+      service: localstack-svc
+      entryPoints: ["web", "websecure"]
+      tls: {}
+
+    # Router for DynamoDB subdomain (dynamodb.aws.lab)
+    to-localstack-dynamodb:
+      rule: "Host(`dynamodb.aws.lab`)"
+      service: localstack-svc
+      entryPoints: ["web", "websecure"]
+      tls: {}
+
+    # Router for Lambda subdomain (lambda.aws.lab)
+    to-localstack-lambda:
+      rule: "Host(`lambda.aws.lab`)"
+      service: localstack-svc
+      entryPoints: ["web", "websecure"]
+      tls: {}
+
+    # Router for SQS subdomain (sqs.aws.lab)
+    to-localstack-sqs:
+      rule: "Host(`sqs.aws.lab`)"
+      service: localstack-svc
+      entryPoints: ["web", "websecure"]
+      tls: {}
+
+  services:
+    localstack-svc:
+      loadBalancer:
+        servers:
+          - url: "http://{{ localstack_ip }}:4566"

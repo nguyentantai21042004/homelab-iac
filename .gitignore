@@ -33,6 +33,7 @@ terraform.rc
 # Inventory với sensitive data
 ansible/inventory/hosts.yml
 !ansible/inventory/*.example
+ansible/group_vars/all/vault.yml
 
 # Retry files
 *.retry
@@ -51,3 +52,4 @@ linux/
 
 # ===== Logs =====
 *.log
+

@@ -10,3 +10,6 @@ traefik_dashboard_password: "{{ vault_traefik_dashboard_password }}"
 
 # Backend services IP addresses
 storage_backend_ip: "172.16.21.10"
+
+# LocalStack IP
+localstack_ip: "172.16.21.20"

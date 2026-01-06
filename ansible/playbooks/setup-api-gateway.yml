@@ -17,6 +17,7 @@
         tf_pass: "{{ traefik_dashboard_password | default(vault_traefik_dashboard_password | default('changeme123')) }}"
         tf_acme_email: "{{ traefik_acme_email | default('nguyentantai.dev@gmail.com') }}"
         tf_storage_ip: "{{ storage_backend_ip | default('172.16.21.10') }}"
+        tf_localstack_ip: "{{ localstack_ip | default('192.168.1.50') }}"
 
     - name: Debug effective auth
       debug:
@@ -127,7 +128,18 @@
       vars:
         traefik_dashboard_user: "{{ tf_user }}"
         traefik_dashboard_password_hash: "{{ traefik_dashboard_password_hash }}"
+
         storage_backend_ip: "{{ tf_storage_ip }}"
+
+    - name: Copy dynamic_localstack.yml
+      template:
+        src: ../templates/traefik/dynamic_localstack.yml.j2
+        dest: "{{ tf_stack }}/config/dynamic_localstack.yml"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      vars:
+        localstack_ip: "{{ tf_localstack_ip }}"
 
     - name: Copy docker-compose.yml
       template:
