@@ -6,12 +6,6 @@
   become: yes
 
   vars:
-    storage_data_path: "/mnt/storage_data"
-    storage_stack_path: "/mnt/storage_data/storage-stack"
-    minio_root_user: "tantai"
-    minio_root_password: "21042004"
-    zot_auth_user: "tantai"
-    zot_auth_password: "21042004"
 
   tasks:
     # ===== System Optimization =====

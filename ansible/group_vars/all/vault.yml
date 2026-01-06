@@ -1,0 +1,11 @@
+# Vault file for sensitive data
+# Encrypt this file with: ansible-vault encrypt group_vars/all/vault.yml
+
+# PostgreSQL passwords
+vault_postgres_password: "21042004!"
+
+# MinIO passwords
+vault_minio_password: "21042004!"
+
+# Zot Registry passwords
+vault_zot_password: "21042004!"

@@ -1,0 +1,8 @@
+# PostgreSQL servers configuration
+# Database configuration
+postgres_version: "15"
+postgres_password: "{{ vault_postgres_password | default('ChangeMeInProduction!') }}"
+
+# Storage paths
+pg_data_path: "/mnt/pg_data"
+pg_stack_path: "/mnt/pg_data/postgres-stack"
