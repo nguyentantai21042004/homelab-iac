@@ -12,7 +12,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MINIO VM (172.16.20.10)                      │
+│                    MINIO VM (172.16.21.10)                      │
 │                    3 vCPU | 6GB RAM                             │
 │                                                                 │
 │  ┌─────────────────┐         ┌─────────────────────────────┐    │
@@ -85,22 +85,22 @@ ansible-playbook playbooks/setup-storage.yml
 
 #### MinIO Console
 
-- URL: `http://172.16.20.10:9001`
+- URL: `http://172.16.21.10:9001`
 - Login: `admin` / `SuperSecretPassword123!`
 
 #### Zot Registry
 
 ```bash
 # Cấu hình Docker client (insecure registry)
-echo '{"insecure-registries": ["172.16.20.10:5000"]}' | sudo tee /etc/docker/daemon.json
+echo '{"insecure-registries": ["172.16.21.10:5000"]}' | sudo tee /etc/docker/daemon.json
 sudo systemctl restart docker
 
 # Push image
-docker tag alpine:latest 172.16.20.10:5000/my-alpine:v1
-docker push 172.16.20.10:5000/my-alpine:v1
+docker tag alpine:latest 172.16.21.10:5000/my-alpine:v1
+docker push 172.16.21.10:5000/my-alpine:v1
 
 # Pull image
-docker pull 172.16.20.10:5000/my-alpine:v1
+docker pull 172.16.21.10:5000/my-alpine:v1
 ```
 
 #### MinIO S3 API
@@ -111,7 +111,7 @@ wget https://dl.min.io/client/mc/release/linux-amd64/mc
 chmod +x mc
 
 # Configure
-./mc alias set myminio http://172.16.20.10:9000 admin SuperSecretPassword123!
+./mc alias set myminio http://172.16.21.10:9000 admin SuperSecretPassword123!
 
 # List buckets
 ./mc ls myminio
@@ -175,17 +175,17 @@ ansible-playbook playbooks/setup-storage.yml
 
 #### Access MinIO Console
 
-- URL: `http://172.16.20.10:9001`
+- URL: `http://172.16.21.10:9001`
 - Login: `admin` / `SuperSecretPassword123!`
 
 #### Use Zot Registry
 
 ```bash
 # Configure Docker for insecure registry
-echo '{"insecure-registries": ["172.16.20.10:5000"]}' | sudo tee /etc/docker/daemon.json
+echo '{"insecure-registries": ["172.16.21.10:5000"]}' | sudo tee /etc/docker/daemon.json
 sudo systemctl restart docker
 
 # Push/Pull images
-docker tag alpine:latest 172.16.20.10:5000/my-alpine:v1
-docker push 172.16.20.10:5000/my-alpine:v1
+docker tag alpine:latest 172.16.21.10:5000/my-alpine:v1
+docker push 172.16.21.10:5000/my-alpine:v1
 ```

@@ -16,7 +16,7 @@
         tf_user: "{{ traefik_dashboard_user | default('admin') }}"
         tf_pass: "{{ traefik_dashboard_password | default(vault_traefik_dashboard_password | default('changeme123')) }}"
         tf_acme_email: "{{ traefik_acme_email | default('nguyentantai.dev@gmail.com') }}"
-        tf_storage_ip: "{{ storage_backend_ip | default('172.16.20.10') }}"
+        tf_storage_ip: "{{ storage_backend_ip | default('172.16.21.10') }}"
 
     - name: Debug effective auth
       debug:

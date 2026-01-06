@@ -37,12 +37,12 @@ http:
     storage-service:
       loadBalancer:
         servers:
-          - url: "http://{{ storage_backend_ip | default('172.16.20.10') }}:9001"
+          - url: "http://{{ storage_backend_ip | default('172.16.21.10') }}:9001"
 
     registry-service:
       loadBalancer:
         servers:
-          - url: "http://{{ storage_backend_ip | default('172.16.20.10') }}:5000"
+          - url: "http://{{ storage_backend_ip | default('172.16.21.10') }}:5000"
 
   middlewares:
     # Basic Auth for Traefik Dashboard

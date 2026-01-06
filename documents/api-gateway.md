@@ -23,8 +23,8 @@
 │  │                                                           │  │
 │  │  Routes:                                                  │  │
 │  │  - dashboard.tantai.dev → Traefik Dashboard (Auth)        │  │
-│  │  - storage.tantai.dev → MinIO Console (172.16.20.10:9001) │  │
-│  │  - registry.tantai.dev → ZOT Registry (172.16.20.10:5000) │  │
+│  │  - storage.tantai.dev → MinIO Console (172.16.21.10:9001) │  │
+│  │  - registry.tantai.dev → ZOT Registry (172.16.21.10:5000) │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  Config: /opt/traefik/                                          │
@@ -40,8 +40,8 @@
 | Domain               | Backend                      | Mục đích               |
 | -------------------- | ---------------------------- | ---------------------- |
 | dashboard.tantai.dev | Traefik Dashboard (internal) | Quản lý Traefik routes |
-| storage.tantai.dev   | 172.16.20.10:9001            | MinIO Console UI       |
-| registry.tantai.dev  | 172.16.20.10:5000            | ZOT Registry UI        |
+| storage.tantai.dev   | 172.16.21.10:9001            | MinIO Console UI       |
+| registry.tantai.dev  | 172.16.21.10:5000            | ZOT Registry UI        |
 
 ### Điểm nổi bật
 
@@ -86,7 +86,7 @@ Sửa `ansible/group_vars/api_gateway_servers.yml`:
 
 ```yaml
 traefik_acme_email: "your-email@example.com" # Email cho Let's Encrypt
-storage_backend_ip: "172.16.20.10" # IP của Storage VM
+storage_backend_ip: "172.16.21.10" # IP của Storage VM
 ```
 
 #### Bước 4: Chạy Ansible
@@ -209,7 +209,7 @@ http:
     my-service:
       loadBalancer:
         servers:
-          - url: "http://172.16.20.20:8080" # IP:Port của backend
+          - url: "http://172.16.21.20:8080" # IP:Port của backend
 ```
 
 Sau đó chạy lại playbook:
@@ -260,8 +260,8 @@ Traefik API Gateway on standalone VM - Reverse proxy with automatic SSL and Dash
 | Domain               | Backend           | Purpose               |
 | -------------------- | ----------------- | --------------------- |
 | dashboard.tantai.dev | Traefik Dashboard | Manage Traefik routes |
-| storage.tantai.dev   | 172.16.20.10:9001 | MinIO Console UI      |
-| registry.tantai.dev  | 172.16.20.10:5000 | ZOT Registry UI       |
+| storage.tantai.dev   | 172.16.21.10:9001 | MinIO Console UI      |
+| registry.tantai.dev  | 172.16.21.10:5000 | ZOT Registry UI       |
 
 ### Highlights
 
@@ -303,7 +303,7 @@ Edit `ansible/group_vars/api_gateway_servers.yml`:
 
 ```yaml
 traefik_acme_email: "your-email@example.com"
-storage_backend_ip: "172.16.20.10"
+storage_backend_ip: "172.16.21.10"
 ```
 
 #### Step 4: Run Ansible
