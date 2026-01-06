@@ -108,9 +108,16 @@ ansible-playbook playbooks/setup-cicd.yml
 - Đăng nhập bằng GitHub
 - Activate repository cần CI/CD
 
-### Cấu hình Pipeline
+### Activate Repository
 
-Tạo file `.woodpecker.yml` trong repo:
+1. Login vào Dashboard
+2. Click **"Add repository"** hoặc tìm repo trong list
+3. Click **"Activate"** để enable CI/CD
+4. Repo sẽ tự động nhận webhook từ GitHub
+
+### Cấu hình Pipeline Cơ bản
+
+Tạo file `.woodpecker.yml` trong root của repo:
 
 ```yaml
 steps:
@@ -120,6 +127,62 @@ steps:
       - npm install
       - npm run build
 
+  - name: test
+    image: node:20
+    commands:
+      - npm test
+```
+
+### Filter theo Branch/Event
+
+```yaml
+# Chỉ chạy trên branch main
+when:
+  branch: main
+
+steps:
+  - name: build
+    image: node:20
+    commands:
+      - npm run build
+```
+
+```yaml
+# Chạy trên nhiều branches
+when:
+  branch: [main, develop, feature/*]
+
+# Chạy theo event type
+when:
+  event: [push, pull_request, tag]
+
+# Chạy chỉ khi có tag
+when:
+  event: tag
+```
+
+### Sử dụng Secrets
+
+1. Vào **Repo Settings → Secrets** trên Dashboard
+2. Add secret (VD: `docker_password`)
+3. Sử dụng trong pipeline:
+
+```yaml
+steps:
+  - name: docker-push
+    image: docker
+    environment:
+      DOCKER_PASSWORD:
+        from_secret: docker_password
+    commands:
+      - docker login -u myuser -p $DOCKER_PASSWORD
+      - docker push myimage
+```
+
+### Push to Zot Registry (Private)
+
+```yaml
+steps:
   - name: docker
     image: woodpeckerci/plugin-docker-buildx
     settings:
@@ -129,9 +192,44 @@ steps:
       insecure: true
 ```
 
-### Push to Zot Registry
+VM đã được cấu hình trust Zot registry (`insecure-registries` trong Docker daemon).
 
-Vì Zot trong LAN, tốc độ push cực nhanh (Gigabit). VM đã được cấu hình trust Zot registry (`insecure-registries` trong Docker daemon).
+### Pipeline cho nhiều Stages
+
+```yaml
+steps:
+  - name: install
+    image: node:20
+    commands:
+      - npm ci
+
+  - name: lint
+    image: node:20
+    commands:
+      - npm run lint
+
+  - name: test
+    image: node:20
+    commands:
+      - npm test
+
+  - name: build
+    image: node:20
+    commands:
+      - npm run build
+    when:
+      branch: main
+
+  - name: deploy
+    image: alpine
+    commands:
+      - echo "Deploying to production..."
+    when:
+      event: push
+      branch: main
+```
+
+> **Docs đầy đủ**: https://woodpecker-ci.org/docs/usage/intro
 
 ## 6. Chiến lược Tối ưu
 
@@ -153,23 +251,17 @@ Container `docker-gc` tự động dọn rác lúc 3h sáng mỗi ngày:
 
 ### Version Pinning
 
-Sử dụng Major version tag (`:2`) thay vì `:latest`:
+Sử dụng specific version tag (`v3.12.0`) thay vì `:latest`:
 
-- Tự động nhận bản vá lỗi (2.1.0 → 2.1.5)
-- Không nhảy lên major version mới (có thể breaking change)
-
-## 7. Bảo trì
-
-### Backup
-
-Database được lưu trên PostgreSQL VM → Backup theo policy của Postgres.
+- Tránh breaking changes khi có major version mới
+- Kiểm soát được version đang chạy
 
 ### Update Woodpecker
 
 ```bash
 # 1. Pull image mới
-docker pull woodpeckerci/woodpecker-server:2
-docker pull woodpeckerci/woodpecker-agent:2
+docker pull woodpeckerci/woodpecker-server:v3.12.0
+docker pull woodpeckerci/woodpecker-agent:v3.12.0
 
 # 2. Restart
 cd /opt/woodpecker
