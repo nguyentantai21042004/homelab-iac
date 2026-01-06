@@ -32,34 +32,60 @@
 
 Provider `josenk/esxi` khi clone VM từ local sẽ download template về rồi upload lại → chậm. Admin VM nằm trong ESXi network, clone trực tiếp qua internal network → nhanh hơn 5-10x.
 
+### Điểm nổi bật
+
+| Component     | Pattern           | Mô tả                                                                  |
+| ------------- | ----------------- | ---------------------------------------------------------------------- |
+| **Terraform** | Dynamic Data Disk | Module tự tạo data disk nếu `data_disk_size > 0`, dùng `dynamic` block |
+| **Terraform** | Reusable Module   | 1 module `esxi-vm` cho mọi VM, chỉ đổi params                          |
+| **Ansible**   | 4-tier RBAC       | PostgreSQL tự tạo 4 users: master/dev/prod/readonly                    |
+| **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` cho DB/Storage                    |
+| **Ansible**   | Vault Secrets     | Password trong `group_vars/all/vault.yml`, encrypted                   |
+| **Scripts**   | Auto-unlock       | Tự detect và force-unlock stale Terraform locks                        |
+
+### Quick Commands
+
+```bash
+make sync-start    # Start Mutagen sync
+make apply         # Terraform apply via Admin VM
+make sync-status   # Check sync status
+```
+
 ### Cấu trúc Project
 
 ```
 homelab-iac/
-├── terraform/                    # Infrastructure
-│   ├── main.tf                   # Định nghĩa VMs
-│   ├── provider.tf               # Kết nối ESXi
-│   ├── variables.tf              # Input variables
-│   ├── locals.tf                 # Port groups
-│   ├── outputs.tf                # VM IPs output
-│   ├── terraform.tfvars          # Credentials (gitignored)
-│   └── modules/esxi-vm/          # Reusable VM module
+├── Makefile                      # Quick commands (make apply, make sync-start)
+├── terraform/
+│   ├── main.tf                   # VM definitions (admin, postgres, storage, api-gateway)
+│   ├── modules/esxi-vm/          # Reusable module với dynamic data disk
+│   ├── locals.tf                 # Port groups mapping
+│   └── variables.tf              # ESXi credentials, template name
 │
-├── ansible/                      # Configuration
-│   ├── ansible.cfg               # Ansible settings
-│   ├── inventory/hosts.yml       # Server list
-│   └── playbooks/
-│       ├── setup-vm.yml          # Basic VM config
-│       └── setup-admin-vm.yml    # Admin VM tools
+├── ansible/
+│   ├── playbooks/
+│   │   ├── setup-vm.yml          # Basic: hostname, static IP, mount disk
+│   │   ├── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
+│   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
+│   │   ├── setup-storage.yml     # MinIO + Zot Registry
+│   │   ├── setup-api-gateway.yml # Traefik với Let's Encrypt
+│   │   └── postgres-add-database.yml  # Tạo DB với 4-tier RBAC
+│   ├── group_vars/               # Variables per group
+│   │   ├── all/vault.yml         # Encrypted secrets
+│   │   ├── postgres_servers.yml
+│   │   ├── storage_servers.yml
+│   │   └── api_gateway_servers.yml
+│   └── templates/                # Jinja2 templates
+│       ├── postgres/docker-compose.yml.j2
+│       ├── minio/docker-compose.yml.j2
+│       └── traefik/*.j2
 │
-├── scripts/                      # Automation
-│   ├── sync-start.sh             # Start Mutagen sync
-│   ├── sync-stop.sh              # Stop sync
-│   ├── remote-apply.sh           # Terraform apply on Admin VM
-│   └── remote-destroy.sh         # Terraform destroy on Admin VM
+├── scripts/
+│   ├── sync-start.sh             # Mutagen sync with ignore patterns
+│   ├── remote-apply.sh           # Auto-unlock + apply
+│   └── remote-destroy.sh
 │
-├── linux/ovftool/                # OVF Tool cho Admin VM (Linux)
-└── tools/ovftool/                # OVF Tool cho local (macOS)
+└── documents/                    # Detailed guides
 ```
 
 ### Yêu cầu cài đặt
@@ -225,34 +251,60 @@ terraform plan
 
 The `josenk/esxi` provider downloads template to local then uploads back when cloning → slow. Admin VM sits inside ESXi network, clones directly via internal network → 5-10x faster.
 
+### Highlights
+
+| Component     | Pattern           | Description                                                                 |
+| ------------- | ----------------- | --------------------------------------------------------------------------- |
+| **Terraform** | Dynamic Data Disk | Module auto-creates data disk if `data_disk_size > 0`, uses `dynamic` block |
+| **Terraform** | Reusable Module   | Single `esxi-vm` module for all VMs, just change params                     |
+| **Ansible**   | 4-tier RBAC       | PostgreSQL auto-creates 4 users: master/dev/prod/readonly                   |
+| **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` for DB/Storage                         |
+| **Ansible**   | Vault Secrets     | Passwords in `group_vars/all/vault.yml`, encrypted                          |
+| **Scripts**   | Auto-unlock       | Auto-detect and force-unlock stale Terraform locks                          |
+
+### Quick Commands
+
+```bash
+make sync-start    # Start Mutagen sync
+make apply         # Terraform apply via Admin VM
+make sync-status   # Check sync status
+```
+
 ### Project Structure
 
 ```
 homelab-iac/
-├── terraform/                    # Infrastructure
-│   ├── main.tf                   # VM definitions
-│   ├── provider.tf               # ESXi connection
-│   ├── variables.tf              # Input variables
-│   ├── locals.tf                 # Port groups
-│   ├── outputs.tf                # VM IPs output
-│   ├── terraform.tfvars          # Credentials (gitignored)
-│   └── modules/esxi-vm/          # Reusable VM module
+├── Makefile                      # Quick commands (make apply, make sync-start)
+├── terraform/
+│   ├── main.tf                   # VM definitions (admin, postgres, storage, api-gateway)
+│   ├── modules/esxi-vm/          # Reusable module with dynamic data disk
+│   ├── locals.tf                 # Port groups mapping
+│   └── variables.tf              # ESXi credentials, template name
 │
-├── ansible/                      # Configuration
-│   ├── ansible.cfg               # Ansible settings
-│   ├── inventory/hosts.yml       # Server list
-│   └── playbooks/
-│       ├── setup-vm.yml          # Basic VM config
-│       └── setup-admin-vm.yml    # Admin VM tools
+├── ansible/
+│   ├── playbooks/
+│   │   ├── setup-vm.yml          # Basic: hostname, static IP, mount disk
+│   │   ├── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
+│   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
+│   │   ├── setup-storage.yml     # MinIO + Zot Registry
+│   │   ├── setup-api-gateway.yml # Traefik with Let's Encrypt
+│   │   └── postgres-add-database.yml  # Create DB with 4-tier RBAC
+│   ├── group_vars/               # Variables per group
+│   │   ├── all/vault.yml         # Encrypted secrets
+│   │   ├── postgres_servers.yml
+│   │   ├── storage_servers.yml
+│   │   └── api_gateway_servers.yml
+│   └── templates/                # Jinja2 templates
+│       ├── postgres/docker-compose.yml.j2
+│       ├── minio/docker-compose.yml.j2
+│       └── traefik/*.j2
 │
-├── scripts/                      # Automation
-│   ├── sync-start.sh             # Start Mutagen sync
-│   ├── sync-stop.sh              # Stop sync
-│   ├── remote-apply.sh           # Terraform apply on Admin VM
-│   └── remote-destroy.sh         # Terraform destroy on Admin VM
+├── scripts/
+│   ├── sync-start.sh             # Mutagen sync with ignore patterns
+│   ├── remote-apply.sh           # Auto-unlock + apply
+│   └── remote-destroy.sh
 │
-├── linux/ovftool/                # OVF Tool for Admin VM (Linux)
-└── tools/ovftool/                # OVF Tool for local (macOS)
+└── documents/                    # Detailed guides
 ```
 
 ### Requirements

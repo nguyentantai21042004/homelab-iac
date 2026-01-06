@@ -5,7 +5,9 @@
   hosts: postgres_servers
   become: yes
 
-  vars:
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+    - ../group_vars/all/vault.yml
 
   tasks:
     # ===== System Optimization =====

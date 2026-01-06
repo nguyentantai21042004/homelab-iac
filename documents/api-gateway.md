@@ -43,6 +43,15 @@
 | storage.tantai.dev   | 172.16.20.10:9001            | MinIO Console UI       |
 | registry.tantai.dev  | 172.16.20.10:5000            | ZOT Registry UI        |
 
+### Điểm nổi bật
+
+| Pattern                      | Mô tả                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| **Password Hash Extraction** | Dùng `slurp` + `regex_replace` để extract bcrypt hash từ htpasswd file |
+| **Dynamic Reload**           | Traefik `watch: true` tự reload config khi file thay đổi               |
+| **ACME Auto-renewal**        | Let's Encrypt cert tự renew, lưu trong `acme.json`                     |
+| **Basic Auth Middleware**    | Dashboard protected bằng BasicAuth middleware                          |
+
 ### Triển khai
 
 #### Bước 1: Tạo VM
@@ -194,6 +203,15 @@ Traefik API Gateway on standalone VM - Reverse proxy with automatic SSL and Dash
 | dashboard.tantai.dev | Traefik Dashboard | Manage Traefik routes |
 | storage.tantai.dev   | 172.16.20.10:9001 | MinIO Console UI      |
 | registry.tantai.dev  | 172.16.20.10:5000 | ZOT Registry UI       |
+
+### Highlights
+
+| Pattern                      | Description                                                         |
+| ---------------------------- | ------------------------------------------------------------------- |
+| **Password Hash Extraction** | Uses `slurp` + `regex_replace` to extract bcrypt hash from htpasswd |
+| **Dynamic Reload**           | Traefik `watch: true` auto-reloads config on file changes           |
+| **ACME Auto-renewal**        | Let's Encrypt cert auto-renews, stored in `acme.json`               |
+| **Basic Auth Middleware**    | Dashboard protected with BasicAuth middleware                       |
 
 ### Deployment
 

@@ -6,6 +6,10 @@
   hosts: postgres_servers
   become: yes
 
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+    - ../group_vars/all/vault.yml
+
   vars:
     db_name: "{{ db_name }}"
     # Passwords - override these with -e or vault

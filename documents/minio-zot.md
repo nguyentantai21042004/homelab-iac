@@ -19,10 +19,10 @@
 │  │   Boot Disk     │         │      Data Disk (100GB)      │    │
 │  │   /dev/sda      │         │      /dev/sdb               │    │
 │  │                 │         │                             │    │
-│  │  - Ubuntu OS    │         │  Mount: /mnt/minio_data     │    │
+│  │  - Ubuntu OS    │         │  Mount: /mnt/storage_data   │    │
 │  │  - Docker       │         │  Format: XFS                │    │
 │  │  - System files │         │                             │    │
-│  │                 │         │  └── minio-stack/           │    │
+│  │                 │         │  └── storage-stack/         │    │
 │  │                 │         │      ├── .env               │    │
 │  │                 │         │      ├── docker-compose.yml │    │
 │  │                 │         │      └── zot-config.json    │    │
@@ -78,7 +78,7 @@ cd ansible
 ansible-playbook playbooks/setup-vm.yml -l minio
 
 # Setup MinIO + Zot
-ansible-playbook playbooks/setup-minio.yml
+ansible-playbook playbooks/setup-storage.yml
 ```
 
 ### Sử dụng
@@ -132,7 +132,7 @@ chmod +x mc
 
 ```bash
 # Backup MinIO data
-tar -czf minio-backup.tar.gz /mnt/minio_data
+tar -czf minio-backup.tar.gz /mnt/storage_data
 
 # Restore
 tar -xzf minio-backup.tar.gz -C /
@@ -168,7 +168,7 @@ terraform output minio_ip
 ```bash
 cd ansible
 ansible-playbook playbooks/setup-vm.yml -l minio
-ansible-playbook playbooks/setup-minio.yml
+ansible-playbook playbooks/setup-storage.yml
 ```
 
 ### Usage
