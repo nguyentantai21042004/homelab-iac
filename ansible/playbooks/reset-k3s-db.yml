@@ -1,0 +1,18 @@
+---
+- name: Reset K3s Database
+  hosts: postgres_servers
+  become: yes
+  tasks:
+    - name: Reset Database 'k3s'
+      shell: |
+        docker exec -i pg15_prod psql -U postgres -c "
+        SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'k3s' AND pid <> pg_backend_pid();
+        DROP DATABASE IF EXISTS k3s;
+        CREATE DATABASE k3s OWNER k3s_master;
+        GRANT ALL PRIVILEGES ON DATABASE k3s TO k3s_master;
+        "
+      register: db_reset
+
+    - name: Show result
+      debug:
+        msg: "Database 'k3s' has been reset. Ready for fresh K3s install."

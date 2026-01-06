@@ -1,0 +1,106 @@
+---
+# Playbook: Setup K3s HA Cluster with External Datastore
+# - Install K3s on all nodes
+# - Deploy Kube-VIP for Virtual IP
+
+- name: Setup K3s Cluster
+  hosts: k3s_servers
+  become: yes
+  vars_files:
+    - ../group_vars/k3s_servers.yml
+    - ../group_vars/all/vault.yml
+
+  tasks:
+    # ===== Prerequisites =====
+    - name: Disable swap (K3s requirement)
+      shell: |
+        swapoff -a
+        sed -i '/swap/d' /etc/fstab
+      changed_when: false
+
+    - name: Load required kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+
+    - name: Enable IP forwarding
+      sysctl:
+        name: "{{ item }}"
+        value: "1"
+        state: present
+        reload: yes
+      loop:
+        - net.bridge.bridge-nf-call-iptables
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.ipv4.ip_forward
+
+    # ===== Install K3s =====
+    - name: Check if K3s is already installed
+      stat:
+        path: /etc/rancher/k3s/k3s.yaml
+      register: k3s_installed
+
+    - name: Install K3s server
+      shell: |
+        curl -sfL https://get.k3s.io | sh -s - server \
+          --token "{{ k3s_token }}" \
+          --datastore-endpoint "{{ datastore_endpoint }}" \
+          {{ extra_server_args | join(' ') }}
+      environment:
+        INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+      args:
+        creates: /etc/rancher/k3s/k3s.yaml
+      register: k3s_install
+
+    - name: Wait for K3s to be ready
+      wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
+        state: present
+        timeout: 120
+      when: k3s_install.changed
+
+    # ===== Deploy Kube-VIP =====
+    - name: Create manifests directory
+      file:
+        path: /var/lib/rancher/k3s/server/manifests
+        state: directory
+        mode: "0755"
+
+    - name: Deploy Kube-VIP DaemonSet
+      template:
+        src: ../templates/k3s/kube-vip.yaml.j2
+        dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+        mode: "0644"
+
+    - name: Deploy Traefik HelmChartConfig
+      template:
+        src: ../templates/k3s/traefik-config.yaml.j2
+        dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+        mode: "0644"
+
+    # ===== Verify =====
+    - name: Wait for node to be Ready
+      shell: kubectl get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: 30
+      delay: 10
+      changed_when: false
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Show cluster status
+      shell: kubectl get nodes -o wide
+      register: cluster_status
+      changed_when: false
+      run_once: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Display cluster nodes
+      debug:
+        msg: "{{ cluster_status.stdout_lines }}"
+      run_once: true

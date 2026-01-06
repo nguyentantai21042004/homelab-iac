@@ -45,7 +45,7 @@ variable "k3s_vm_specs" {
   })
   default = {
     cpu = 4
-    ram = 6144 # 6GB (Rancher + Longhorn + headroom)
+    ram = 8192 # 8GB (Rancher + Longhorn + headroom)
   }
   description = "K3s node VM specifications"
 }

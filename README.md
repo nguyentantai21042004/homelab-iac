@@ -41,6 +41,8 @@ Provider `josenk/esxi` khi clone VM từ local sẽ download template về rồi
 | **Ansible**   | 4-tier RBAC       | PostgreSQL tự tạo 4 users: master/dev/prod/readonly                    |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` cho DB/Storage                    |
 | **Ansible**   | Vault Secrets     | Password trong `group_vars/all/vault.yml`, encrypted                   |
+| **K3s HA**    | Cluster HA        | 3 Masters + External DB + Kube-VIP (172.16.21.100)                     |
+| **Storage**   | Distributed       | Longhorn Block Storage + S3 Backup                                     |
 | **Scripts**   | Auto-unlock       | Tự detect và force-unlock stale Terraform locks                        |
 
 ### Quick Commands
@@ -50,6 +52,16 @@ make sync-start    # Start Mutagen sync
 make apply         # Terraform apply via Admin VM
 make sync-status   # Check sync status
 ```
+
+### Dịch vụ Cluster (Access Info)
+
+Add vào `/etc/hosts`: `172.16.21.100 rancher.tantai.dev longhorn.tantai.dev`
+
+| Dịch vụ | URL | User/Pass |
+|---------|-----|-----------|
+| **Rancher** | `https://rancher.tantai.dev` | `admin` / (trong vault) |
+| **Longhorn** | `http://longhorn.tantai.dev` | (No auth) |
+| **Traefik** | `http://172.16.21.100:8080` | (Dashboard) |
 
 ### Cấu trúc Project
 
@@ -69,6 +81,9 @@ homelab-iac/
 │   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
 │   │   ├── setup-storage.yml     # MinIO + Zot Registry
 │   │   ├── setup-api-gateway.yml # Traefik với Let's Encrypt
+│   │   ├── setup-k3s-cluster.yml # K3s HA với External Postgres
+│   │   ├── setup-rancher.yml     # Rancher trên K3s
+│   │   ├── setup-longhorn.yml    # Longhorn Distributed Storage
 │   │   └── postgres-add-database.yml  # Tạo DB với 4-tier RBAC
 │   ├── group_vars/               # Variables per group
 │   │   ├── all/vault.yml         # Encrypted secrets
@@ -221,7 +236,7 @@ terraform plan
 | ------------ | -------------- | ----------------- |
 | VM Network   | 192.168.1.0/24 | Management, Admin |
 | DB-Network   | 172.16.19.0/24 | Database servers  |
-| Prod-Network | 172.16.20.0/24 | Production apps   |
+| Prod-Network | 172.16.21.0/24 | Production apps   |
 
 ---
 
@@ -260,6 +275,8 @@ The `josenk/esxi` provider downloads template to local then uploads back when cl
 | **Ansible**   | 4-tier RBAC       | PostgreSQL auto-creates 4 users: master/dev/prod/readonly                   |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` for DB/Storage                         |
 | **Ansible**   | Vault Secrets     | Passwords in `group_vars/all/vault.yml`, encrypted                          |
+| **K3s HA**    | Cluster HA        | 3 Masters + External DB + Kube-VIP (172.16.21.100)                          |
+| **Storage**   | Distributed       | Longhorn Block Storage + S3 Backup                                          |
 | **Scripts**   | Auto-unlock       | Auto-detect and force-unlock stale Terraform locks                          |
 
 ### Quick Commands
@@ -288,6 +305,9 @@ homelab-iac/
 │   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
 │   │   ├── setup-storage.yml     # MinIO + Zot Registry
 │   │   ├── setup-api-gateway.yml # Traefik with Let's Encrypt
+│   │   ├── setup-k3s-cluster.yml # K3s HA with External Postgres
+│   │   ├── setup-rancher.yml     # Rancher on K3s
+│   │   ├── setup-longhorn.yml    # Longhorn Distributed Storage
 │   │   └── postgres-add-database.yml  # Create DB with 4-tier RBAC
 │   ├── group_vars/               # Variables per group
 │   │   ├── all/vault.yml         # Encrypted secrets
@@ -440,7 +460,7 @@ terraform plan
 | ------------ | -------------- | ----------------- |
 | VM Network   | 192.168.1.0/24 | Management, Admin |
 | DB-Network   | 172.16.19.0/24 | Database servers  |
-| Prod-Network | 172.16.20.0/24 | Production apps   |
+| Prod-Network | 172.16.21.0/24 | Production apps   |
 
 ---
 
@@ -449,5 +469,8 @@ terraform plan
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
 - [PostgreSQL Server Setup](documents/postgres.md)
 - [MinIO + Zot Registry Setup](documents/minio-zot.md)
+- [API Gateway (Traefik) Setup](documents/api-gateway.md)
+- [K3s HA Cluster Setup](documents/k3s-cluster.md)
+- [Longhorn Storage Guide](documents/longhorn.md)
 - [Jinja2 Templates Guide](documents/jinja2-templates.md)
 - [Mutagen - Cơ chế hoạt động / How it works](documents/mutagen.md)

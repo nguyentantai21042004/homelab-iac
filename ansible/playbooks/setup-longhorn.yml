@@ -1,0 +1,86 @@
+---
+# Playbook: Install Longhorn for Distributed Block Storage
+# Usage: ansible-playbook playbooks/setup-longhorn.yml
+
+- name: Install Longhorn
+  hosts: k3s_servers[0]
+  become: yes
+  vars:
+    longhorn_version: "v1.5.3"
+  
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+  tasks:
+    # 1. Prerequisite Check (open-iscsi is mostly required for Longhorn)
+    # Note: Ubuntu standard cloud images usually have open-iscsi. K3s setup-vm might need to ensure this.
+    # We will assume it's present or installed via package manager if missing.
+    
+    # 2. Add Helm Repo
+    - name: Add Longhorn Helm repo
+      command: helm repo add longhorn https://charts.longhorn.io
+      changed_when: false
+
+    - name: Update Helm repos
+      command: helm repo update
+      changed_when: false
+
+    - name: Create longhorn-system namespace
+      command: kubectl create namespace longhorn-system
+      register: lh_ns
+      failed_when: false
+      changed_when: lh_ns.rc == 0
+
+    # 3. Install Longhorn
+    - name: Check if Longhorn is installed
+      command: helm status longhorn -n longhorn-system
+      register: lh_status
+      failed_when: false
+      changed_when: false
+
+    - name: Install Longhorn
+      shell: |
+        helm install longhorn longhorn/longhorn \
+          --namespace longhorn-system \
+          --version {{ longhorn_version }} \
+          --set defaultSettings.defaultDataPath="/var/lib/longhorn"
+      when: lh_status.rc != 0
+
+    - name: Wait for Longhorn UI to be ready
+      shell: kubectl wait --for=condition=Available deployment/longhorn-ui -n longhorn-system --timeout=300s
+      when: lh_status.rc != 0
+
+    # 4. Expose UI via Ingress (Traefik)
+    - name: Create Ingress for Longhorn UI
+      copy:
+        dest: /tmp/longhorn-ingress.yaml
+        content: |
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: longhorn-ingress
+            namespace: longhorn-system
+            annotations:
+              kubernetes.io/ingress.class: traefik
+          spec:
+            rules:
+            - host: longhorn.tantai.dev
+              http:
+                paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: longhorn-frontend
+                      port:
+                        number: 80
+        mode: "0644"
+      when: lh_status.rc != 0
+
+    - name: Apply Ingress
+      command: kubectl apply -f /tmp/longhorn-ingress.yaml
+      when: lh_status.rc != 0
+
+    - name: Get Longhorn URL
+      debug:
+        msg: "Longhorn is installing. Access UI at: http://longhorn.tantai.dev"
