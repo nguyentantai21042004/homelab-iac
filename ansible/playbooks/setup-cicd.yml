@@ -88,18 +88,19 @@
         group: "{{ ansible_user }}"
       register: compose_config
 
+    - name: Stop and remove existing containers
+      shell: |
+        cd {{ woodpecker_stack_path }}
+        docker-compose down || true
+        docker rm -f woodpecker-server woodpecker-agent docker-gc 2>/dev/null || true
+      ignore_errors: yes
+
     - name: Start Woodpecker CI
       shell: |
         cd {{ woodpecker_stack_path }}
         docker-compose up -d
       register: docker_up_result
-      changed_when: "'Creating' in docker_up_result.stderr or 'Recreating' in docker_up_result.stderr"
-
-    - name: Recreate containers if config changed
-      shell: |
-        cd {{ woodpecker_stack_path }}
-        docker-compose up -d --force-recreate
-      when: compose_config.changed
+      changed_when: "'Creating' in docker_up_result.stdout or docker_up_result.rc == 0"
 
     - name: Wait for Woodpecker Server to be ready
       wait_for:
