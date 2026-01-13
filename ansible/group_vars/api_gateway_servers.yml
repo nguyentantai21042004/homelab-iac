@@ -16,3 +16,6 @@ localstack_ip: "172.16.21.20"
 
 # Woodpecker CI IP
 woodpecker_ip: "172.16.21.21"
+
+# K3s Cluster VIP
+k3s_vip: "172.16.21.100"

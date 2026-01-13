@@ -1,5 +1,16 @@
+# =============================================================================
+# API Gateway Dynamic Configuration
+# =============================================================================
+# Architecture: API Gateway handles ALL TLS termination
+# K3s Traefik only receives HTTP traffic (no TLS)
+# =============================================================================
+
 http:
   routers:
+    # =========================================================================
+    # EXTERNAL SERVICES (outside K3s)
+    # =========================================================================
+    
     # Traefik Dashboard
     traefik-dashboard:
       rule: "Host(`dashboard.tantai.dev`)"
@@ -8,6 +19,7 @@ http:
         - websecure
       middlewares:
         - traefik-auth
+        - secure-headers
       tls:
         certResolver: letsencrypt
 
@@ -18,18 +30,20 @@ http:
       entryPoints:
         - websecure
       middlewares:
-        - storage-headers
+        - forwarded-headers
+        - secure-headers
       tls:
         certResolver: letsencrypt
 
     # ZOT Registry
-    registry-ui:
+    registry:
       rule: "Host(`registry.tantai.dev`)"
       service: registry-service
       entryPoints:
         - websecure
       middlewares:
-        - registry-headers
+        - forwarded-headers
+        - secure-headers
       tls:
         certResolver: letsencrypt
 
@@ -39,10 +53,59 @@ http:
       service: woodpecker-service
       entryPoints:
         - websecure
+      middlewares:
+        - forwarded-headers
       tls:
         certResolver: letsencrypt
 
+    # =========================================================================
+    # K3S CLUSTER SERVICES
+    # =========================================================================
+    # All K3s services go through this router
+    # API Gateway terminates TLS, forwards HTTP to K3s Traefik
+    # K3s Traefik routes based on Host header
+    
+    # Main domain - K3s services
+    k3s-main:
+      rule: "Host(`tantai.dev`)"
+      service: k3s-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - forwarded-headers
+      tls:
+        certResolver: letsencrypt
+
+    # Wildcard for future K3s subdomains (app.tantai.dev, api.tantai.dev, etc.)
+    # Add more specific routers here as needed:
+    # 
+    # k3s-app:
+    #   rule: "Host(`app.tantai.dev`)"
+    #   service: k3s-service
+    #   entryPoints:
+    #     - websecure
+    #   middlewares:
+    #     - forwarded-headers
+    #   tls:
+    #     certResolver: letsencrypt
+
+    # =========================================================================
+    # HTTP to HTTPS Redirect
+    # =========================================================================
+    http-to-https:
+      rule: "HostRegexp(`{host:.+}`)"
+      service: noop@internal
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+      priority: 1
+
+  # ===========================================================================
+  # SERVICES
+  # ===========================================================================
   services:
+    # External Services
     storage-service:
       loadBalancer:
         servers:
@@ -58,6 +121,16 @@ http:
         servers:
           - url: "http://{{ woodpecker_ip | default('172.16.21.21') }}:8000"
 
+    # K3s Cluster Service (forward to K3s Traefik on HTTP port)
+    k3s-service:
+      loadBalancer:
+        servers:
+          - url: "http://{{ k3s_vip | default('172.16.21.100') }}:80"
+        passHostHeader: true
+
+  # ===========================================================================
+  # MIDDLEWARES
+  # ===========================================================================
   middlewares:
     # Basic Auth for Traefik Dashboard
     traefik-auth:
@@ -65,20 +138,23 @@ http:
         users:
           - "{{ traefik_dashboard_user | default('admin') }}:{{ traefik_dashboard_password_hash | default('') }}"
 
-    # Headers for MinIO Console
-    storage-headers:
+    # Redirect HTTP to HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    # Forward headers to backend (important for K3s services)
+    forwarded-headers:
       headers:
         customRequestHeaders:
           X-Forwarded-Proto: "https"
+          X-Forwarded-Ssl: "on"
+
+    # Security headers
+    secure-headers:
+      headers:
         customResponseHeaders:
           X-Content-Type-Options: "nosniff"
           X-Frame-Options: "SAMEORIGIN"
-
-    # Headers for ZOT Registry
-    registry-headers:
-      headers:
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
-        customResponseHeaders:
-          X-Content-Type-Options: "nosniff"
-
+          X-XSS-Protection: "1; mode=block"

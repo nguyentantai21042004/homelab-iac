@@ -357,7 +357,7 @@ curl -k https://rancher.tantai.dev
 
 Để sử dụng `kubectl` từ máy local (laptop/desktop) để điều khiển cụm K3s:
 
-```bash
+````bash
 # Dùng Ansible playbook (tự động lấy thông tin từ inventory)
 cd ansible
 ansible-playbook playbooks/export-kubeconfig.yml
@@ -380,7 +380,7 @@ kubectl get pods --all-namespaces
 
 # Xem cluster info
 kubectl cluster-info
-```
+````
 
 **Lưu ý:**
 
@@ -400,6 +400,339 @@ kubectl get nodes
 KUBECONFIG=~/.kube/config:~/.kube/k3s-homelab.yaml kubectl config view --flatten > ~/.kube/config
 kubectl config use-context k3s-homelab
 ```
+
+### TLS/SSL Certificate Management
+
+#### Tổng quan
+
+K3s cluster sử dụng **cert-manager** để tự động quản lý TLS certificates từ Let's Encrypt cho các Ingress resources.
+
+**Flow hoạt động:**
+
+```
+1. Tạo ClusterIssuer (Let's Encrypt)
+2. Apply Ingress với annotation cert-manager.io/cluster-issuer
+3. cert-manager tự động tạo Certificate resource
+4. Certificate tạo Challenge (HTTP-01 hoặc DNS-01)
+5. Let's Encrypt validate domain
+6. Certificate được ký và lưu vào Secret
+7. Traefik sử dụng Secret để serve HTTPS
+```
+
+#### 1. cert-manager Installation
+
+cert-manager được cài đặt tự động khi deploy Rancher:
+
+**File:** `ansible/playbooks/setup-rancher.yml`
+
+```yaml
+# Install cert-manager via Helm
+helm install cert-manager jetstack/cert-manager \
+--namespace cert-manager \
+--create-namespace \
+--version v1.17.0 \
+--set installCRDs=true
+```
+
+**Kiểm tra:**
+
+```bash
+kubectl get pods -n cert-manager
+# Should see:
+# - cert-manager
+# - cert-manager-cainjector
+# - cert-manager-webhook
+```
+
+#### 2. ClusterIssuer Configuration
+
+**File:** `documents/k3s-clusterissuer-example.yaml`
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: nguyentantai.dev@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
+```
+
+**Apply:**
+
+```bash
+kubectl apply -f documents/k3s-clusterissuer-example.yaml
+kubectl get clusterissuer letsencrypt-prod
+```
+
+**Giải thích:**
+
+- **ACME server**: Let's Encrypt production endpoint
+- **Email**: Dùng để nhận thông báo về certificate
+- **HTTP-01 solver**: Validate domain qua HTTP challenge
+- **Ingress class**: Traefik sẽ tạo challenge ingress
+
+#### 3. Ingress với TLS
+
+**Ví dụ Ingress:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portfolio
+  namespace: pet-projects
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: tantai.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portfolio
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - tantai.dev
+      secretName: portfolio-tls
+```
+
+**Các thành phần:**
+
+- **Annotation `cert-manager.io/cluster-issuer`**: Chỉ định ClusterIssuer để dùng
+- **TLS section**: Khai báo domain và secret name cho certificate
+- **Secret name**: cert-manager sẽ tạo secret này với certificate
+
+#### 4. Certificate Lifecycle
+
+**Kiểm tra Certificate:**
+
+```bash
+# Check certificate status
+kubectl get certificate -n pet-projects
+
+# Check certificate details
+kubectl describe certificate portfolio-tls -n pet-projects
+
+# Check secret (certificate data)
+kubectl get secret portfolio-tls -n pet-projects -o yaml
+```
+
+**Certificate States:**
+
+- **Issuing**: Đang được tạo
+- **Ready**: Đã sẵn sàng, có thể dùng
+- **Failed**: Lỗi trong quá trình tạo
+
+#### 5. HTTP-01 Challenge Flow
+
+**Quá trình validation:**
+
+1. **cert-manager tạo Challenge:**
+
+   ```bash
+   kubectl get challenge -n pet-projects
+   ```
+
+2. **cert-manager tạo Challenge Ingress:**
+
+   ```bash
+   kubectl get ingress -n pet-projects | grep acme
+   # Output: cm-acme-http-solver-xxxxx
+   ```
+
+3. **Let's Encrypt truy cập:**
+
+   ```
+   http://tantai.dev/.well-known/acme-challenge/<token>
+   ```
+
+4. **Traefik route đến challenge ingress:**
+
+   - Challenge ingress expose ra K3s nodes (172.16.21.11:80, ...)
+   - Let's Encrypt phải truy cập được từ internet
+
+5. **Validation thành công:**
+   - Certificate được ký
+   - Lưu vào Secret
+   - Traefik tự động reload và dùng certificate
+
+#### 6. Yêu cầu DNS và Network Setup
+
+**Quan trọng:** Domain phải trỏ về K3s cluster hoặc API Gateway để HTTP-01 challenge hoạt động.
+
+**Flow với NoIP Dynamic DNS:**
+
+```
+Internet
+  ↓
+DNS (tantai.dev) → NoIP Dynamic DNS → External IP nhà (113.177.126.206)
+  ↓
+Router NAT/Port Forwarding (Port 80, 443)
+  ↓
+API Gateway (192.168.1.101:80/443)
+  ↓
+K3s Traefik (172.16.21.100:80)
+  ↓
+Challenge Ingress
+  ↓
+cert-manager pod
+```
+
+**Cấu hình cần thiết:**
+
+1. **NoIP Dynamic DNS:**
+
+   - Domain `tantai.dev` trỏ về NoIP hostname
+   - NoIP client tự động update khi external IP thay đổi
+
+2. **Router NAT/Port Forwarding:**
+
+   ```
+   External Port 80  → Internal IP 192.168.1.101:80  (API Gateway)
+   External Port 443 → Internal IP 192.168.1.101:443 (API Gateway)
+   ```
+
+3. **API Gateway forward đến K3s:**
+   - Đã cấu hình trong `dynamic_conf.yml.j2`
+   - Route `k3s-services` forward đến `172.16.21.100:80`
+
+**Nếu DNS/NAT chưa đúng:**
+
+- Let's Encrypt không truy cập được challenge endpoint
+- Lỗi: `wrong status code '404', expected '200'`
+- Certificate không được ký
+
+**Kiểm tra NAT/Port Forwarding:**
+
+```bash
+# Từ internet (hoặc dùng online tool)
+curl http://<external-ip>:80/.well-known/acme-challenge/test
+# Nếu response từ K3s → NAT OK
+# Nếu timeout/refused → Check router port forwarding
+```
+
+#### 7. Troubleshooting TLS
+
+**Certificate không được ký:**
+
+```bash
+# 1. Check certificate status
+kubectl get certificate portfolio-tls -n pet-projects
+
+# 2. Check challenge status
+kubectl get challenge -n pet-projects
+kubectl describe challenge <challenge-name> -n pet-projects
+
+# 3. Check challenge ingress
+kubectl get ingress -n pet-projects | grep acme
+kubectl describe ingress cm-acme-http-solver-xxxxx -n pet-projects
+
+# 4. Test challenge endpoint manually
+curl http://tantai.dev/.well-known/acme-challenge/test
+# Nếu 404 → DNS chưa trỏ đúng
+# Nếu response từ K3s → OK
+
+# 5. Check cert-manager logs
+kubectl logs -n cert-manager -l app=cert-manager --tail=50
+```
+
+**Lỗi thường gặp:**
+
+| Lỗi                          | Nguyên nhân                    | Giải pháp                           |
+| ---------------------------- | ------------------------------ | ----------------------------------- |
+| `wrong status code '404'`    | DNS/NAT chưa đúng              | Check NoIP + Router port forwarding |
+| `Connection refused`         | Challenge ingress không expose | Check Traefik và ingress            |
+| `Certificate request failed` | Rate limit Let's Encrypt       | Đợi 1 giờ hoặc dùng staging         |
+| `Challenge pending`          | DNS chưa propagate             | Đợi 5-10 phút                       |
+| `Timeout`                    | Router không forward port 80   | Cấu hình NAT port forwarding        |
+
+**Với NoIP Dynamic DNS:**
+
+1. **Kiểm tra NoIP hostname:**
+
+   ```bash
+   nslookup tantai.dev
+   # Phải trỏ về external IP nhà bạn
+   ```
+
+2. **Kiểm tra Router NAT:**
+
+   - Vào router admin panel
+   - Tìm "Port Forwarding" hoặc "Virtual Server"
+   - Forward port 80 và 443 đến API Gateway (192.168.1.101)
+
+3. **Test từ internet:**
+
+   ```bash
+   # Dùng online tool như https://www.yougetsignal.com/tools/open-ports/
+   # Hoặc từ server khác
+   curl http://<external-ip>:80
+   # Phải response từ API Gateway/K3s
+   ```
+
+4. **Alternative: Dùng DNS-01 Challenge (nếu NoIP có API):**
+   - Không cần port forwarding
+   - cert-manager tự động tạo TXT record
+   - Cần NoIP API credentials
+
+**Force retry:**
+
+```bash
+# Delete challenge để retry
+kubectl delete challenge <challenge-name> -n pet-projects
+
+# Hoặc delete certificate để tạo lại
+kubectl delete certificate portfolio-tls -n pet-projects
+```
+
+#### 8. Files liên quan
+
+| File                                           | Mục đích                               |
+| ---------------------------------------------- | -------------------------------------- |
+| `documents/k3s-clusterissuer-example.yaml`     | ClusterIssuer config cho Let's Encrypt |
+| `ansible/playbooks/setup-rancher.yml`          | Cài đặt cert-manager                   |
+| `ansible/templates/k3s/traefik-config.yaml.j2` | Traefik config trong K3s               |
+| `ansible/group_vars/k3s_servers.yml`           | K3s server args (TLS SAN)              |
+
+#### 9. Best Practices
+
+1. **Dùng staging trước khi production:**
+
+   ```yaml
+   server: https://acme-staging-v02.api.letsencrypt.org/directory
+   ```
+
+2. **Monitor certificate expiry:**
+
+   ```bash
+   kubectl get certificate -A
+   # Certificates tự động renew trước khi expire
+   ```
+
+3. **Backup private keys:**
+
+   ```bash
+   kubectl get secret letsencrypt-prod -o yaml > backup.yaml
+   ```
+
+4. **Rate limiting:**
+   - Let's Encrypt có rate limit: 50 certs/week/domain
+   - Dùng staging để test trước
 
 ### Troubleshooting
 

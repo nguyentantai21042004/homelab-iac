@@ -1,24 +1,35 @@
+# =============================================================================
+# API Gateway Static Configuration
+# =============================================================================
+# This is the ONLY TLS termination point for all *.tantai.dev domains
+# K3s Traefik only handles HTTP routing internally
+# =============================================================================
+
 api:
   dashboard: true
-  insecure: false # Disable insecure access, use router instead
+  insecure: false
 
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
+    # HTTP entrypoint - used for:
+    # 1. Let's Encrypt HTTP-01 challenge
+    # 2. Redirect to HTTPS
 
   websecure:
     address: ":443"
+    # HTTPS entrypoint - ALL traffic terminates TLS here
 
 providers:
   file:
     directory: /etc/traefik/
-    watch: true # Auto-reload on config changes
+    watch: true
 
+# =============================================================================
+# Certificate Management
+# =============================================================================
+# API Gateway manages ALL certificates for *.tantai.dev
+# K3s does NOT need cert-manager for external domains
 certificatesResolvers:
   letsencrypt:
     acme:
@@ -31,5 +42,6 @@ log:
   level: INFO
   format: json
 
-accessLog: {}
+accessLog:
+  format: json
 
