@@ -353,6 +353,54 @@ curl -k https://rancher.tantai.dev
 | Rancher | https://rancher.tantai.dev          | Cluster Management |
 | kubectl | Copy từ `/etc/rancher/k3s/k3s.yaml` | Local access       |
 
+#### Cấu hình kubectl trên máy local
+
+Để sử dụng `kubectl` từ máy local (laptop/desktop) để điều khiển cụm K3s:
+
+```bash
+# Dùng Ansible playbook (tự động lấy thông tin từ inventory)
+cd ansible
+ansible-playbook playbooks/export-kubeconfig.yml
+
+Playbook sẽ tự động:
+
+- Lấy kubeconfig từ node K3s đầu tiên trong inventory
+- Thay server URL thành VIP (`172.16.21.100:6443`)
+- Lưu vào `~/.kube/config` trên máy local
+- Backup file config cũ (nếu có)
+
+**Sau khi export, test kết nối:**
+
+```bash
+# Kiểm tra kết nối
+kubectl get nodes
+
+# Xem tất cả pods
+kubectl get pods --all-namespaces
+
+# Xem cluster info
+kubectl cluster-info
+```
+
+**Lưu ý:**
+
+- Script sẽ tự động backup file `~/.kube/config` cũ (nếu có)
+- Kubeconfig sẽ được cấu hình để trỏ vào VIP (`172.16.21.100:6443`) thay vì IP node cụ thể
+- Đảm bảo máy local có thể truy cập được VIP (cùng network hoặc VPN)
+- File kubeconfig có quyền `600` (chỉ owner đọc/ghi)
+
+**Nếu muốn dùng nhiều cluster cùng lúc:**
+
+```bash
+# Export vào file riêng
+export KUBECONFIG=~/.kube/k3s-homelab.yaml
+kubectl get nodes
+
+# Hoặc merge vào config hiện tại
+KUBECONFIG=~/.kube/config:~/.kube/k3s-homelab.yaml kubectl config view --flatten > ~/.kube/config
+kubectl config use-context k3s-homelab
+```
+
 ### Troubleshooting
 
 #### K3s không start
