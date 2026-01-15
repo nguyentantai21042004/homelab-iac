@@ -1,0 +1,30 @@
+# Qdrant Production Configuration
+
+log_level: INFO
+
+storage:
+  # Optimize for SSD
+  storage_path: /qdrant/storage
+  snapshots_path: /qdrant/snapshots
+  
+  # Performance settings
+  optimizers:
+    # Flush threshold (number of vectors before flush)
+    default_segment_number: 4
+    # Indexing threshold
+    indexing_threshold: 20000
+  
+  # HNSW Index configuration
+  hnsw_index:
+    # Keep index on disk if RAM is limited
+    on_disk: false
+    # M parameter (higher = better quality, more RAM)
+    m: 16
+    # ef_construct (higher = better quality, slower indexing)
+    ef_construct: 100
+
+service:
+  # Max request size (100MB)
+  max_request_size_mb: 100
+  # Enable CORS for dashboard
+  enable_cors: true

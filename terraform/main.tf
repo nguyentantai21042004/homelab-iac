@@ -31,8 +31,8 @@ module "storage" {
   clone_from_vm  = var.clone_from_vm
   disk_store     = var.disk_store
   numvcpus       = 3
-  memsize        = 6144 
-  data_disk_size = 100  
+  memsize        = 6144
+  data_disk_size = 100
   network        = local.port_groups.prod_network
 }
 
@@ -55,10 +55,10 @@ module "localstack" {
   guest_name     = "localstack"
   clone_from_vm  = var.clone_from_vm
   disk_store     = var.disk_store
-  numvcpus       = 4 
-  memsize        = 8192  
-  data_disk_size = 100   
-  network        = local.port_groups.prod_network 
+  numvcpus       = 4
+  memsize        = 8192
+  data_disk_size = 100
+  network        = local.port_groups.prod_network
 }
 
 # ===== K3s Cluster Nodes (Converged: Master + Worker) =====
@@ -86,4 +86,17 @@ module "cicd" {
   memsize        = 8192
   data_disk_size = 50
   network        = local.port_groups.prod_network
+}
+
+# ===== Qdrant VM (Vector Database) =====
+module "qdrant" {
+  source = "./modules/esxi-vm"
+
+  guest_name     = "qdrant"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = 2
+  memsize        = 4096 # 4GB RAM
+  data_disk_size = 50   # 50GB data disk
+  network        = local.port_groups.db_network
 }

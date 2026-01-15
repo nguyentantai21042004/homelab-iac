@@ -1,0 +1,130 @@
+---
+# Playbook: Setup Qdrant Vector Database with Docker
+
+- name: Setup Qdrant Vector Database
+  hosts: qdrant_servers
+  become: yes
+
+  vars_files:
+    - ../group_vars/qdrant_servers.yml
+    - ../group_vars/all/vault.yml
+
+  tasks:
+    # ===== System Optimization for Vector DB =====
+    - name: Configure kernel for high I/O performance
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: "vm.swappiness", value: "10" }
+        - { name: "vm.dirty_ratio", value: "15" }
+        - { name: "vm.dirty_background_ratio", value: "5" }
+        - { name: "fs.file-max", value: "100000" }
+
+    # ===== Docker Installation =====
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker from Ubuntu repository
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # ===== Format and Mount Data Disk =====
+    - name: Check if data disk is formatted
+      command: blkid {{ data_disk_device }}
+      register: blkid_result
+      failed_when: false
+      changed_when: false
+
+    - name: Format data disk with XFS
+      filesystem:
+        fstype: xfs
+        dev: "{{ data_disk_device }}"
+      when: blkid_result.rc != 0
+
+    - name: Create mount point
+      file:
+        path: "{{ qdrant_data_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount data disk
+      mount:
+        path: "{{ qdrant_data_path }}"
+        src: "{{ data_disk_device }}"
+        fstype: xfs
+        opts: defaults,noatime
+        state: mounted
+
+    # ===== Create Qdrant Stack Directory =====
+    - name: Create qdrant stack directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ qdrant_stack_path }}"
+        - "{{ qdrant_stack_path }}/storage"
+        - "{{ qdrant_stack_path }}/snapshots"
+
+    # ===== Copy Configuration Files =====
+    - name: Copy Qdrant config
+      template:
+        src: ../templates/qdrant/config.yaml.j2
+        dest: "{{ qdrant_stack_path }}/config.yaml"
+        mode: "0644"
+
+    - name: Copy docker-compose.yml
+      template:
+        src: ../templates/qdrant/docker-compose.yml.j2
+        dest: "{{ qdrant_stack_path }}/docker-compose.yml"
+        mode: "0644"
+
+    # ===== Start Qdrant =====
+    - name: Start Qdrant container
+      shell: |
+        cd {{ qdrant_stack_path }}
+        docker-compose up -d
+      register: docker_compose_result
+
+    - name: Wait for Qdrant to be ready
+      wait_for:
+        port: "{{ qdrant_http_port }}"
+        delay: 5
+        timeout: 60
+
+    - name: Show Qdrant status
+      debug:
+        msg: |
+          Qdrant Vector Database is running!
+          Host: {{ ansible_host }}
+          HTTP API: http://{{ ansible_host }}:{{ qdrant_http_port }}
+          gRPC: {{ ansible_host }}:{{ qdrant_grpc_port }}
+          Dashboard: http://{{ ansible_host }}:{{ qdrant_http_port }}/dashboard
+          Data path: {{ qdrant_stack_path }}/storage

@@ -1,0 +1,32 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:{{ qdrant_version }}
+    container_name: qdrant-server
+    restart: always
+    ports:
+      - "{{ qdrant_http_port }}:6333"  # HTTP API & Dashboard
+      - "{{ qdrant_grpc_port }}:6334"  # gRPC (high performance)
+    volumes:
+      - ./storage:/qdrant/storage:z
+      - ./snapshots:/qdrant/snapshots:z
+      - ./config.yaml:/qdrant/config/production.yaml:ro
+    environment:
+      - QDRANT__SERVICE__ENABLE_TLS=false
+{% if qdrant_api_key %}
+      - QDRANT__SERVICE__API_KEY={{ qdrant_api_key }}
+{% endif %}
+    ulimits:
+      nofile:
+        soft: {{ qdrant_ulimit_nofile }}
+        hard: {{ qdrant_ulimit_nofile }}
+    networks:
+      - qdrant_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  qdrant_net:
+    driver: bridge

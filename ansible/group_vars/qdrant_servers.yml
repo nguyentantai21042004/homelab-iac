@@ -1,0 +1,18 @@
+# Qdrant Vector Database configuration
+
+# Version
+qdrant_version: "latest"
+
+# API Key (set in vault.yml for production)
+qdrant_api_key: "{{ vault_qdrant_api_key | default('') }}"
+
+# Storage paths
+qdrant_data_path: "/mnt/qdrant_data"
+qdrant_stack_path: "/mnt/qdrant_data/qdrant-stack"
+
+# Performance tuning
+qdrant_ulimit_nofile: 65535
+
+# Ports
+qdrant_http_port: 6333
+qdrant_grpc_port: 6334
