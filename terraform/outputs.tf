@@ -26,3 +26,7 @@ output "localstack_ip" {
 output "cicd_ip" {
   value = module.cicd.vm_ip
 }
+
+output "immich_ip" {
+  value = module.immich.vm_ip
+}

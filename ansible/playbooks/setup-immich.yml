@@ -151,6 +151,36 @@
         delay: 15
         timeout: 120
 
+    # ===== WireGuard VPN Setup =====
+    - name: Create WireGuard stack directory
+      file:
+        path: "{{ wireguard_stack_path }}"
+        state: directory
+        mode: "0755"
+      when: wireguard_enabled | default(false)
+
+    - name: Copy WireGuard docker-compose.yml
+      template:
+        src: ../templates/wireguard/docker-compose.yml.j2
+        dest: "{{ wireguard_stack_path }}/docker-compose.yml"
+        mode: "0644"
+      when: wireguard_enabled | default(false)
+
+    - name: Start WireGuard VPN
+      shell: |
+        cd {{ wireguard_stack_path }}
+        docker-compose up -d
+      when: wireguard_enabled | default(false)
+
+    - name: Wait for WireGuard UI to be ready
+      wait_for:
+        host: localhost
+        port: "{{ wireguard_ui_port }}"
+        delay: 5
+        timeout: 60
+      when: wireguard_enabled | default(false)
+
+    # ===== Final Information =====
     - name: Show Immich access information
       debug:
         msg: |
@@ -164,11 +194,20 @@
 
           Stack path: {{ immich_stack_path }}
 
+          {% if wireguard_enabled | default(false) %}
+          WireGuard VPN is running!
+          - Web UI: http://{{ ansible_host }}:{{ wireguard_ui_port }}
+          - VPN Port: {{ wireguard_port }}/udp
+
+          {% endif %}
           Next steps:
           1. Truy cập Web UI và tạo tài khoản Admin đầu tiên
           2. Cài đặt Immich Mobile App trên iPhone 11
           3. Cấu hình auto-backup từ iPhone
-          4. (Optional) Cấu hình Hardware Acceleration nếu có iGPU
+          {% if wireguard_enabled | default(false) %}
+          4. Tạo WireGuard peer cho iPhone tại http://{{ ansible_host }}:{{ wireguard_ui_port }}
+          5. Cấu hình On-Demand VPN trên iPhone
+          {% endif %}
 
   handlers:
     - name: Restart Docker
