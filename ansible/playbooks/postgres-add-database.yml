@@ -4,7 +4,7 @@
 
 - name: Add new PostgreSQL database
   hosts: postgres_servers
-  become: yes
+  become: true
 
   vars_files:
     - ../group_vars/postgres_servers.yml

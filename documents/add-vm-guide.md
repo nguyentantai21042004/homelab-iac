@@ -193,7 +193,7 @@ postgres_servers:
 ---
 - name: Setup PostgreSQL Server
   hosts: postgres_servers
-  become: yes
+  become: true
 
   tasks:
     - name: Install PostgreSQL

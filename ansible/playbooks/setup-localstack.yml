@@ -4,7 +4,7 @@
 
 - name: Setup LocalStack Pro
   hosts: localstack
-  become: yes
+  become: true
   vars:
     localstack_stack_path: "/opt/localstack"
     data_disk_device: "/dev/sdb"

@@ -4,10 +4,10 @@
 
 - name: Install Longhorn
   hosts: k3s_servers[0]
-  become: yes
+  become: true
   vars:
     longhorn_version: "v1.5.3"
-  
+
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
@@ -15,7 +15,7 @@
     # 1. Prerequisite Check (open-iscsi is mostly required for Longhorn)
     # Note: Ubuntu standard cloud images usually have open-iscsi. K3s setup-vm might need to ensure this.
     # We will assume it's present or installed via package manager if missing.
-    
+
     # 2. Add Helm Repo
     - name: Add Longhorn Helm repo
       command: helm repo add longhorn https://charts.longhorn.io

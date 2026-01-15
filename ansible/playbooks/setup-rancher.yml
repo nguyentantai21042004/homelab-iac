@@ -5,8 +5,8 @@
 # - Install Rancher (3 replicas for HA)
 
 - name: Install Rancher
-  hosts: k3s_servers[0]  # Run on first node only
-  become: yes
+  hosts: k3s_servers[0] # Run on first node only
+  become: true
   vars_files:
     - ../group_vars/k3s_servers.yml
     - ../group_vars/all/vault.yml
@@ -106,8 +106,8 @@
       debug:
         msg: |
           Rancher is installed!
-          
+
           URL: https://{{ rancher_hostname }}
           Bootstrap Password: {{ vault_rancher_bootstrap_password | default('admin') }}
-          
+
           Make sure DNS for {{ rancher_hostname }} points to VIP: {{ vip_address }}

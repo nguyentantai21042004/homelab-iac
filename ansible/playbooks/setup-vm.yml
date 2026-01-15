@@ -7,7 +7,7 @@
 
 - name: Setup VM
   hosts: all
-  become: yes
+  become: true
 
   tasks:
     # ===== Timezone =====

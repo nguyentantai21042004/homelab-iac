@@ -5,7 +5,7 @@
 
 - name: Setup Admin VM
   hosts: admin
-  become: yes
+  become: true
 
   tasks:
     # ===== System Update =====

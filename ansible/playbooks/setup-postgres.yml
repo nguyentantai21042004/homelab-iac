@@ -3,7 +3,7 @@
 
 - name: Setup PostgreSQL Server
   hosts: postgres_servers
-  become: yes
+  become: true
 
   vars_files:
     - ../group_vars/postgres_servers.yml

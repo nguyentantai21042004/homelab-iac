@@ -4,7 +4,7 @@
 
 - name: Setup API Gateway (Traefik)
   hosts: api_gateway_servers
-  become: yes
+  become: true
   vars_files:
     - ../group_vars/api_gateway_servers.yml
     - ../group_vars/all/vault.yml

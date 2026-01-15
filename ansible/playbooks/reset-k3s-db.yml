@@ -1,7 +1,7 @@
 ---
 - name: Reset K3s Database
   hosts: postgres_servers
-  become: yes
+  become: true
   tasks:
     - name: Reset Database 'k3s'
       shell: |
