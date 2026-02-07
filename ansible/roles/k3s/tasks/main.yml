@@ -1,0 +1,94 @@
+---
+# Tasks for k3s role
+# Disables swap, loads kernel modules, enables IP forwarding,
+# installs K3s server with external datastore, deploys Kube-VIP
+# and Traefik HelmChartConfig, and verifies node is ready.
+
+# ===== Prerequisites =====
+- name: Disable swap (K3s requirement)
+  shell: |
+    swapoff -a
+    sed -i '/swap/d' /etc/fstab
+  changed_when: false
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ k3s_kernel_modules }}"
+
+- name: Enable IP forwarding
+  sysctl:
+    name: "{{ item }}"
+    value: "1"
+    state: present
+    reload: yes
+  loop: "{{ k3s_sysctl_params }}"
+
+# ===== Install K3s =====
+- name: Check if K3s is already installed
+  stat:
+    path: "{{ k3s_config_path }}"
+  register: k3s_installed
+
+- name: Install K3s server
+  shell: |
+    curl -sfL https://get.k3s.io | sh -s - server \
+      --token "{{ k3s_token }}" \
+      --datastore-endpoint "{{ datastore_endpoint }}" \
+      {{ extra_server_args | join(' ') }}
+  environment:
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+  args:
+    creates: "{{ k3s_config_path }}"
+  register: k3s_install
+
+- name: Wait for K3s to be ready
+  wait_for:
+    path: "{{ k3s_config_path }}"
+    state: present
+    timeout: "{{ k3s_install_timeout }}"
+  when: k3s_install.changed
+
+# ===== Deploy Kube-VIP =====
+- name: Create manifests directory
+  file:
+    path: "{{ k3s_manifests_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy Kube-VIP DaemonSet
+  template:
+    src: kube-vip.yaml.j2
+    dest: "{{ k3s_manifests_dir }}/kube-vip.yaml"
+    mode: "0644"
+
+- name: Deploy Traefik HelmChartConfig
+  template:
+    src: traefik-config.yaml.j2
+    dest: "{{ k3s_manifests_dir }}/traefik-config.yaml"
+    mode: "0644"
+
+# ===== Verify =====
+- name: Wait for node to be Ready
+  shell: kubectl get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: node_ready
+  until: node_ready.stdout == "True"
+  retries: "{{ k3s_node_ready_retries }}"
+  delay: "{{ k3s_node_ready_delay }}"
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ k3s_config_path }}"
+
+- name: Show cluster status
+  shell: kubectl get nodes -o wide
+  register: cluster_status
+  changed_when: false
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ k3s_config_path }}"
+
+- name: Display cluster nodes
+  debug:
+    msg: "{{ cluster_status.stdout_lines }}"
+  run_once: true

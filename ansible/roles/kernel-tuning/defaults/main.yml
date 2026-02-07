@@ -1,0 +1,3 @@
+---
+# Default sysctl parameters (empty - each playbook passes its own list)
+sysctl_params: []

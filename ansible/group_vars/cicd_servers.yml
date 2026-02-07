@@ -13,7 +13,7 @@ woodpecker_admin_user: "{{ vault_woodpecker_admin_user }}"
 # Database connection
 woodpecker_db_user: "woodpecker_master"
 woodpecker_db_password: "{{ vault_woodpecker_db_password }}"
-woodpecker_db_host: "172.16.19.10" # PostgreSQL VM IP
+woodpecker_db_host: "{{ service_ips.postgres }}"
 woodpecker_db_name: "woodpecker"
 
 # Agent settings
@@ -21,5 +21,5 @@ woodpecker_agent_secret: "{{ vault_woodpecker_agent_secret }}"
 woodpecker_max_procs: 4 # Max parallel builds
 
 # Zot Registry (insecure if no SSL)
-zot_registry_ip: "172.16.21.10"
+zot_registry_ip: "{{ service_ips.storage }}"
 zot_registry_port: "5000"

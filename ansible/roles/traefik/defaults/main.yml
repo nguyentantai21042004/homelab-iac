@@ -1,0 +1,18 @@
+---
+# Traefik role defaults
+
+# Stack directory where docker-compose.yml and config live
+traefik_stack_path: "/opt/traefik"
+
+# Let's Encrypt ACME email
+traefik_acme_email: "nguyentantai.dev@gmail.com"
+
+# Traefik Dashboard credentials (should be overridden via vault or group_vars)
+traefik_dashboard_user: "admin"
+traefik_dashboard_password: "{{ vault_traefik_dashboard_password | default('changeme123') }}"
+
+# Backend service IPs (should be overridden via group_vars)
+storage_backend_ip: "172.16.21.10"
+localstack_ip: "172.16.21.20"
+woodpecker_ip: "172.16.21.21"
+k3s_vip: "172.16.21.100"

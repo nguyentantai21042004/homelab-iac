@@ -4,125 +4,16 @@
 - name: Setup PostgreSQL Server
   hosts: postgres_servers
   become: true
-
-  vars_files:
-    - ../group_vars/postgres_servers.yml
-    - ../group_vars/all/vault.yml
-
-  tasks:
-    # ===== System Optimization =====
-    - name: Configure kernel for DB I/O optimization
-      sysctl:
-        name: "{{ item.name }}"
-        value: "{{ item.value }}"
-        state: present
-        reload: yes
-      loop:
-        - { name: "vm.swappiness", value: "10" }
-        - { name: "vm.dirty_ratio", value: "15" }
-        - { name: "vm.dirty_background_ratio", value: "5" }
-
-    # ===== Docker Installation =====
-    - name: Install Docker dependencies
-      apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-        state: present
-        update_cache: yes
-
-    - name: Install Docker from Ubuntu repository
-      apt:
-        name:
-          - docker.io
-          - docker-compose
-        state: present
-        update_cache: yes
-
-    - name: Start Docker service
-      service:
-        name: docker
-        state: started
-        enabled: yes
-
-    - name: Add user to docker group
-      user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
-
-    # ===== Format and Mount Data Disk =====
-    - name: Check if data disk is formatted
-      command: blkid {{ data_disk_device }}
-      register: blkid_result
-      failed_when: false
-      changed_when: false
-
-    - name: Format data disk with XFS
-      filesystem:
-        fstype: xfs
-        dev: "{{ data_disk_device }}"
-      when: blkid_result.rc != 0
-
-    - name: Create mount point
-      file:
-        path: "{{ pg_data_path }}"
-        state: directory
-        mode: "0755"
-
-    - name: Mount data disk
-      mount:
-        path: "{{ pg_data_path }}"
-        src: "{{ data_disk_device }}"
-        fstype: xfs
-        opts: defaults,noatime
-        state: mounted
-
-    # ===== Create PostgreSQL Stack Directory =====
-    - name: Create postgres stack directories
-      file:
-        path: "{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ pg_stack_path }}"
-        - "{{ pg_stack_path }}/data"
-        - "{{ pg_stack_path }}/init-db"
-        - "{{ pg_stack_path }}/config"
-
-    # ===== Copy Configuration Files =====
-    - name: Copy RBAC init script
-      copy:
-        src: ../files/postgres/01-rbac-setup.sql
-        dest: "{{ pg_stack_path }}/init-db/01-rbac-setup.sql"
-        mode: "0644"
-
-    - name: Copy docker-compose.yml
-      template:
-        src: ../templates/postgres/docker-compose.yml.j2
-        dest: "{{ pg_stack_path }}/docker-compose.yml"
-        mode: "0644"
-
-    # ===== Start PostgreSQL =====
-    - name: Start PostgreSQL container
-      shell: |
-        cd {{ pg_stack_path }}
-        docker-compose up -d
-      register: docker_compose_result
-
-    - name: Wait for PostgreSQL to be ready
-      wait_for:
-        port: 5432
-        delay: 5
-        timeout: 60
-
-    - name: Show PostgreSQL status
-      debug:
-        msg: |
-          PostgreSQL is running!
-          Host: {{ ansible_host }}
-          Port: 5432
-          Data path: {{ pg_stack_path }}/data
+  roles:
+    - role: kernel-tuning
+      vars:
+        sysctl_params:
+          - { name: "vm.swappiness", value: "10" }
+          - { name: "vm.dirty_ratio", value: "15" }
+          - { name: "vm.dirty_background_ratio", value: "5" }
+    - role: docker
+    - role: data-disk
+      vars:
+        data_mount_point: "{{ pg_data_path }}"
+        disk_fstype: xfs
+    - role: postgres

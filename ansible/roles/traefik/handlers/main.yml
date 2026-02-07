@@ -1,0 +1,8 @@
+---
+# Handlers for traefik role
+
+- name: Restart Traefik
+  shell: |
+    cd {{ tf_stack }}
+    docker-compose restart
+  listen: "restart traefik"

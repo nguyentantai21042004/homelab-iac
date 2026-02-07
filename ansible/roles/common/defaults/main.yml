@@ -1,0 +1,11 @@
+---
+# Role: common
+# Default variables for basic VM configuration
+
+# Timezone setting
+common_timezone: "Asia/Ho_Chi_Minh"
+
+# DNS servers used in netplan static IP configuration
+common_dns_servers:
+  - "8.8.8.8"
+  - "1.1.1.1"

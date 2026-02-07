@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config:/etc/traefik:ro
+      - ./acme.json:/acme.json
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  traefik-network:
+    driver: bridge

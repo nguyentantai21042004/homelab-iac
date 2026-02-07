@@ -6,116 +6,16 @@
 - name: Setup Woodpecker CI
   hosts: cicd_servers
   become: true
-  vars:
-    data_mount_point: "/mnt/data"
-  vars_files:
-    - ../group_vars/all/vault.yml
-    - ../group_vars/cicd_servers.yml
-
-  tasks:
-    # ===== Pre-flight Check =====
-    - name: Verify data mount point exists
-      stat:
-        path: "{{ data_mount_point }}"
-      register: mount_check
-      failed_when: not mount_check.stat.exists
-      changed_when: false
-
-    # ===== 1. Docker Installation =====
-    - name: Install Docker and dependencies
-      apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-          - docker.io
-          - docker-compose
-        state: present
-        update_cache: yes
-
-    - name: Create Docker daemon config
-      copy:
-        dest: /etc/docker/daemon.json
-        content: |
-          {
-            "data-root": "{{ data_mount_point }}/docker",
-            "storage-driver": "overlay2",
-            "log-driver": "json-file",
-            "log-opts": {
-              "max-size": "50m",
-              "max-file": "3"
-            },
-            "insecure-registries": ["{{ zot_registry_ip }}:{{ zot_registry_port }}"]
-          }
-        mode: "0644"
-      register: docker_config
-
-    - name: Add user to docker group
-      user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
-
-    - name: Restart Docker if config changed
-      service:
-        name: docker
-        state: restarted
-      when: docker_config.changed
-
-    - name: Ensure Docker is running
-      service:
-        name: docker
-        state: started
-        enabled: yes
-
-    # ===== 2. Deploy Woodpecker CI =====
-    - name: Create Woodpecker directory
-      file:
-        path: "{{ woodpecker_stack_path }}"
-        state: directory
-        mode: "0755"
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-
-    - name: Deploy docker-compose.yml
-      template:
-        src: ../templates/woodpecker/docker-compose.yml.j2
-        dest: "{{ woodpecker_stack_path }}/docker-compose.yml"
-        mode: "0644"
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-      register: compose_config
-
-    - name: Stop and remove existing containers
-      shell: |
-        cd {{ woodpecker_stack_path }}
-        docker-compose down || true
-        docker rm -f woodpecker-server woodpecker-agent docker-gc 2>/dev/null || true
-      ignore_errors: yes
-
-    - name: Start Woodpecker CI
-      shell: |
-        cd {{ woodpecker_stack_path }}
-        docker-compose up -d
-      register: docker_up_result
-      changed_when: "'Creating' in docker_up_result.stdout or docker_up_result.rc == 0"
-
-    - name: Wait for Woodpecker Server to be ready
-      wait_for:
-        port: 8000
-        delay: 5
-        timeout: 120
-
-    - name: Display success message
-      debug:
-        msg: |
-          ✅ Woodpecker CI deployed successfully!
-
-          Web UI: https://ci.tantai.dev
-          Direct: http://{{ ansible_host }}:8000
-
-          Next steps:
-            1. Login with GitHub
-            2. Activate your repositories
+  roles:
+    - role: docker
+      vars:
+        docker_daemon_config:
+          data-root: "/mnt/data/docker"
+          storage-driver: overlay2
+          log-driver: json-file
+          log-opts:
+            max-size: "50m"
+            max-file: "3"
+          insecure-registries:
+            - "{{ zot_registry_ip }}:{{ zot_registry_port }}"
+    - role: woodpecker

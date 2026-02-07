@@ -1,0 +1,48 @@
+---
+# Tasks for postgres role
+# Creates stack directories, copies RBAC init script, templates docker-compose,
+# starts PostgreSQL container, and waits for port 5432.
+# NOTE: Docker install, kernel tuning, and data disk are handled by separate roles.
+
+- name: Create postgres stack directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ pg_stack_path }}"
+    - "{{ pg_stack_path }}/data"
+    - "{{ pg_stack_path }}/init-db"
+    - "{{ pg_stack_path }}/config"
+
+- name: Copy RBAC init script
+  copy:
+    src: 01-rbac-setup.sql
+    dest: "{{ pg_stack_path }}/init-db/01-rbac-setup.sql"
+    mode: "0644"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ pg_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start PostgreSQL container
+  shell: |
+    cd {{ pg_stack_path }}
+    docker-compose up -d
+  register: docker_compose_result
+
+- name: Wait for PostgreSQL to be ready
+  wait_for:
+    port: "{{ pg_port }}"
+    delay: 5
+    timeout: 60
+
+- name: Show PostgreSQL status
+  debug:
+    msg: |
+      PostgreSQL is running!
+      Host: {{ ansible_host }}
+      Port: {{ pg_port }}
+      Data path: {{ pg_stack_path }}/data

@@ -8,14 +8,14 @@ traefik_acme_email: "nguyentantai.dev@gmail.com"
 traefik_dashboard_user: "tantai"
 traefik_dashboard_password: "{{ vault_traefik_dashboard_password }}"
 
-# Backend services IP addresses
-storage_backend_ip: "172.16.21.10"
+# Backend services IP addresses (reference service_ips from group_vars/all/common.yml)
+storage_backend_ip: "{{ service_ips.storage }}"
 
 # LocalStack IP
-localstack_ip: "172.16.21.20"
+localstack_ip: "{{ service_ips.localstack }}"
 
 # Woodpecker CI IP
-woodpecker_ip: "172.16.21.21"
+woodpecker_ip: "{{ service_ips.cicd }}"
 
 # K3s Cluster VIP
-k3s_vip: "172.16.21.100"
+k3s_vip: "{{ service_ips.k3s_vip }}"

@@ -1,0 +1,9 @@
+---
+# Default variables for docker role
+
+docker_daemon_config:
+  storage-driver: overlay2
+  log-driver: json-file
+  log-opts:
+    max-size: "10m"
+    max-file: "3"

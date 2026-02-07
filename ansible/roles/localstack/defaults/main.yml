@@ -1,0 +1,14 @@
+---
+# Localstack role defaults
+
+# Stack directory where docker-compose.yml lives
+localstack_stack_path: "/opt/localstack"
+
+# Data volume path for LocalStack persistence
+localstack_data_volume: "/mnt/data/localstack_volume"
+
+# LocalStack API key (should be overridden via vault)
+localstack_api_key: "{{ vault_localstack_api_key }}"
+
+# Port to wait for readiness
+localstack_port: 4566

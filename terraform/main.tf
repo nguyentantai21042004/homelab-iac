@@ -88,15 +88,3 @@ module "cicd" {
   network        = local.port_groups.prod_network
 }
 
-# ===== Immich VM (Photo Management) =====
-module "immich" {
-  source = "./modules/esxi-vm"
-
-  guest_name     = "immich"
-  clone_from_vm  = var.clone_from_vm
-  disk_store     = var.disk_store
-  numvcpus       = 4  # 4 cores cho CPU processing (ML + transcoding)
-  memsize        = 6144  # 6GB RAM (đủ cho Immich không GPU)
-  data_disk_size = 500   # 500GB for photos/videos storage
-  network        = local.port_groups.prod_network
-}

@@ -1,0 +1,34 @@
+---
+# Tasks for localstack role
+# Creates stack directory, templates docker-compose, starts LocalStack Pro,
+# and waits for it to be ready on port 4566.
+# NOTE: Docker install, kernel tuning, and data disk are handled by separate roles.
+
+- name: Create LocalStack stack directory
+  file:
+    path: "{{ localstack_stack_path }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ localstack_stack_path }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Start LocalStack Pro
+  shell: |
+    cd {{ localstack_stack_path }}
+    docker-compose up -d
+  register: docker_up_result
+  changed_when: "'Creating' in docker_up_result.stderr or 'Recreating' in docker_up_result.stderr"
+
+- name: Wait for LocalStack to be ready
+  wait_for:
+    port: "{{ localstack_port }}"
+    delay: 10
+    timeout: 120

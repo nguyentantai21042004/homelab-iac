@@ -38,9 +38,11 @@ Provider `josenk/esxi` khi clone VM từ local sẽ download template về rồi
 | ------------- | ----------------- | ---------------------------------------------------------------------- |
 | **Terraform** | Dynamic Data Disk | Module tự tạo data disk nếu `data_disk_size > 0`, dùng `dynamic` block |
 | **Terraform** | Reusable Module   | 1 module `esxi-vm` cho mọi VM, chỉ đổi params                          |
+| **Ansible**   | Roles-based       | 10 roles tái sử dụng: 4 base + 6 service roles                        |
 | **Ansible**   | 4-tier RBAC       | PostgreSQL tự tạo 4 users: master/dev/prod/readonly                    |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` cho DB/Storage                    |
 | **Ansible**   | Vault Secrets     | Password trong `group_vars/all/vault.yml`, encrypted                   |
+| **Ansible**   | site.yml          | 1 lệnh setup toàn bộ infra: `ansible-playbook playbooks/site.yml`     |
 | **K3s HA**    | Cluster HA        | 3 Masters + External DB + Kube-VIP (172.16.21.100)                     |
 | **Storage**   | Distributed       | Longhorn Block Storage + S3 Backup                                     |
 | **Scripts**   | Auto-unlock       | Tự detect và force-unlock stale Terraform locks                        |
@@ -69,36 +71,54 @@ Add vào `/etc/hosts`: `172.16.21.100 rancher.tantai.dev longhorn.tantai.dev`
 homelab-iac/
 ├── Makefile                      # Quick commands (make apply, make sync-start)
 ├── terraform/
+│   ├── versions.tf               # Terraform + provider version constraints
+│   ├── provider.tf               # ESXi provider config
 │   ├── main.tf                   # VM definitions (admin, postgres, storage, api-gateway)
 │   ├── modules/esxi-vm/          # Reusable module với dynamic data disk
 │   ├── locals.tf                 # Port groups mapping
 │   └── variables.tf              # ESXi credentials, template name
 │
 ├── ansible/
+│   ├── roles/                    # 10 Ansible roles (xem ansible/README.md)
+│   │   ├── common/               # hostname, timezone, static IP
+│   │   ├── docker/               # Docker install + daemon config
+│   │   ├── data-disk/            # format + mount data disk
+│   │   ├── kernel-tuning/        # sysctl params
+│   │   ├── postgres/             # PostgreSQL container
+│   │   ├── minio/                # MinIO + Zot Registry
+│   │   ├── traefik/              # Traefik reverse proxy
+│   │   ├── k3s/                  # K3s HA cluster
+│   │   ├── woodpecker/           # Woodpecker CI
+│   │   └── localstack/           # LocalStack Pro
 │   ├── playbooks/
-│   │   ├── setup-vm.yml          # Basic: hostname, static IP, mount disk
-│   │   ├── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
-│   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
-│   │   ├── setup-storage.yml     # MinIO + Zot Registry
-│   │   ├── setup-api-gateway.yml # Traefik với Let's Encrypt
-│   │   ├── setup-k3s-cluster.yml # K3s HA với External Postgres
-│   │   ├── setup-rancher.yml     # Rancher trên K3s
+│   │   ├── site.yml              # Master playbook — setup toàn bộ infra
+│   │   ├── setup-postgres.yml    # roles: kernel-tuning, docker, data-disk, postgres
+│   │   ├── setup-storage.yml     # roles: kernel-tuning, docker, data-disk, minio
+│   │   ├── setup-api-gateway.yml # roles: docker, traefik
+│   │   ├── setup-k3s-cluster.yml # roles: k3s
+│   │   ├── setup-cicd.yml        # roles: docker, woodpecker
+│   │   ├── setup-localstack.yml  # roles: kernel-tuning, docker, data-disk, localstack
 │   │   ├── setup-longhorn.yml    # Longhorn Distributed Storage
-│   │   └── postgres-add-database.yml  # Tạo DB với 4-tier RBAC
-│   ├── group_vars/               # Variables per group
-│   │   ├── all/vault.yml         # Encrypted secrets
+│   │   ├── setup-rancher.yml     # Rancher trên K3s
+│   │   └── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
+│   ├── group_vars/
+│   │   ├── all/
+│   │   │   ├── common.yml        # service_ips map, shared vars
+│   │   │   └── vault.yml         # Encrypted secrets
 │   │   ├── postgres_servers.yml
 │   │   ├── storage_servers.yml
-│   │   └── api_gateway_servers.yml
-│   └── templates/                # Jinja2 templates
-│       ├── postgres/docker-compose.yml.j2
-│       ├── minio/docker-compose.yml.j2
-│       └── traefik/*.j2
+│   │   └── ...                   # Per-group variables
+│   └── inventory/
+│       └── hosts.yml.example
 │
 ├── scripts/
+│   ├── lib/common.sh             # Shared functions (auto_unlock_terraform)
 │   ├── sync-start.sh             # Mutagen sync with ignore patterns
 │   ├── remote-apply.sh           # Auto-unlock + apply
 │   └── remote-destroy.sh
+│
+├── tests/                        # Structural validation tests
+│   └── test_role_structure.py    # pytest: role compliance checks
 │
 └── documents/                    # Detailed guides
 ```
@@ -272,9 +292,11 @@ The `josenk/esxi` provider downloads template to local then uploads back when cl
 | ------------- | ----------------- | --------------------------------------------------------------------------- |
 | **Terraform** | Dynamic Data Disk | Module auto-creates data disk if `data_disk_size > 0`, uses `dynamic` block |
 | **Terraform** | Reusable Module   | Single `esxi-vm` module for all VMs, just change params                     |
+| **Ansible**   | Roles-based       | 10 reusable roles: 4 base + 6 service roles                                |
 | **Ansible**   | 4-tier RBAC       | PostgreSQL auto-creates 4 users: master/dev/prod/readonly                   |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` for DB/Storage                         |
 | **Ansible**   | Vault Secrets     | Passwords in `group_vars/all/vault.yml`, encrypted                          |
+| **Ansible**   | site.yml          | Single command full infra setup: `ansible-playbook playbooks/site.yml`      |
 | **K3s HA**    | Cluster HA        | 3 Masters + External DB + Kube-VIP (172.16.21.100)                          |
 | **Storage**   | Distributed       | Longhorn Block Storage + S3 Backup                                          |
 | **Scripts**   | Auto-unlock       | Auto-detect and force-unlock stale Terraform locks                          |
@@ -293,36 +315,54 @@ make sync-status   # Check sync status
 homelab-iac/
 ├── Makefile                      # Quick commands (make apply, make sync-start)
 ├── terraform/
+│   ├── versions.tf               # Terraform + provider version constraints
+│   ├── provider.tf               # ESXi provider config
 │   ├── main.tf                   # VM definitions (admin, postgres, storage, api-gateway)
 │   ├── modules/esxi-vm/          # Reusable module with dynamic data disk
 │   ├── locals.tf                 # Port groups mapping
 │   └── variables.tf              # ESXi credentials, template name
 │
 ├── ansible/
+│   ├── roles/                    # 10 Ansible roles (see ansible/README.md)
+│   │   ├── common/               # hostname, timezone, static IP
+│   │   ├── docker/               # Docker install + daemon config
+│   │   ├── data-disk/            # format + mount data disk
+│   │   ├── kernel-tuning/        # sysctl params
+│   │   ├── postgres/             # PostgreSQL container
+│   │   ├── minio/                # MinIO + Zot Registry
+│   │   ├── traefik/              # Traefik reverse proxy
+│   │   ├── k3s/                  # K3s HA cluster
+│   │   ├── woodpecker/           # Woodpecker CI
+│   │   └── localstack/           # LocalStack Pro
 │   ├── playbooks/
-│   │   ├── setup-vm.yml          # Basic: hostname, static IP, mount disk
-│   │   ├── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
-│   │   ├── setup-postgres.yml    # Docker + PostgreSQL 15
-│   │   ├── setup-storage.yml     # MinIO + Zot Registry
-│   │   ├── setup-api-gateway.yml # Traefik with Let's Encrypt
-│   │   ├── setup-k3s-cluster.yml # K3s HA with External Postgres
-│   │   ├── setup-rancher.yml     # Rancher on K3s
+│   │   ├── site.yml              # Master playbook — full infra setup
+│   │   ├── setup-postgres.yml    # roles: kernel-tuning, docker, data-disk, postgres
+│   │   ├── setup-storage.yml     # roles: kernel-tuning, docker, data-disk, minio
+│   │   ├── setup-api-gateway.yml # roles: docker, traefik
+│   │   ├── setup-k3s-cluster.yml # roles: k3s
+│   │   ├── setup-cicd.yml        # roles: docker, woodpecker
+│   │   ├── setup-localstack.yml  # roles: kernel-tuning, docker, data-disk, localstack
 │   │   ├── setup-longhorn.yml    # Longhorn Distributed Storage
-│   │   └── postgres-add-database.yml  # Create DB with 4-tier RBAC
-│   ├── group_vars/               # Variables per group
-│   │   ├── all/vault.yml         # Encrypted secrets
+│   │   ├── setup-rancher.yml     # Rancher on K3s
+│   │   └── setup-admin-vm.yml    # Install Terraform, Ansible, OVFTool
+│   ├── group_vars/
+│   │   ├── all/
+│   │   │   ├── common.yml        # service_ips map, shared vars
+│   │   │   └── vault.yml         # Encrypted secrets
 │   │   ├── postgres_servers.yml
 │   │   ├── storage_servers.yml
-│   │   └── api_gateway_servers.yml
-│   └── templates/                # Jinja2 templates
-│       ├── postgres/docker-compose.yml.j2
-│       ├── minio/docker-compose.yml.j2
-│       └── traefik/*.j2
+│   │   └── ...                   # Per-group variables
+│   └── inventory/
+│       └── hosts.yml.example
 │
 ├── scripts/
+│   ├── lib/common.sh             # Shared functions (auto_unlock_terraform)
 │   ├── sync-start.sh             # Mutagen sync with ignore patterns
 │   ├── remote-apply.sh           # Auto-unlock + apply
 │   └── remote-destroy.sh
+│
+├── tests/                        # Structural validation tests
+│   └── test_role_structure.py    # pytest: role compliance checks
 │
 └── documents/                    # Detailed guides
 ```
@@ -466,6 +506,7 @@ terraform plan
 
 ## Tài liệu bổ sung / Additional Docs
 
+- [Ansible Roles & Playbooks Guide](ansible/README.md)
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
 - [PostgreSQL Server Setup](documents/postgres.md)
 - [MinIO + Zot Registry Setup](documents/minio-zot.md)

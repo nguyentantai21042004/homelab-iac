@@ -1,0 +1,14 @@
+---
+# Postgres role defaults
+
+# PostgreSQL version (Alpine-based image)
+postgres_version: "15"
+
+# PostgreSQL superuser password (should be overridden via vault)
+postgres_password: "{{ vault_postgres_password | default('ChangeMeInProduction!') }}"
+
+# Stack directory where docker-compose.yml and data live
+pg_stack_path: "/mnt/pg_data/postgres-stack"
+
+# Port to expose PostgreSQL on
+pg_port: 5432

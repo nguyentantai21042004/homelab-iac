@@ -1,0 +1,15 @@
+---
+# Default variables for data-disk role
+# These can be overridden per-playbook via role vars
+
+# Device path for the data disk
+data_disk_device: "/dev/sdb"
+
+# Mount point for the data disk
+data_mount_point: "/mnt/data"
+
+# Filesystem type (ext4, xfs, etc.)
+disk_fstype: "ext4"
+
+# Mount options
+disk_mount_opts: "defaults,noatime"

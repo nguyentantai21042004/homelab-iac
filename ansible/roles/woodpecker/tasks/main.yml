@@ -1,0 +1,49 @@
+---
+# Tasks for woodpecker role
+# Creates stack directory, templates docker-compose, stops/starts containers,
+# and waits for Woodpecker CI to be ready on port 8000.
+# NOTE: Docker install is handled by a separate role.
+
+- name: Create Woodpecker stack directory
+  file:
+    path: "{{ woodpecker_stack_path }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ woodpecker_stack_path }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  register: compose_config
+
+- name: Stop and remove existing containers
+  shell: |
+    cd {{ woodpecker_stack_path }}
+    docker-compose down || true
+    docker rm -f woodpecker-server woodpecker-agent docker-gc 2>/dev/null || true
+  ignore_errors: yes
+
+- name: Start Woodpecker CI
+  shell: |
+    cd {{ woodpecker_stack_path }}
+    docker-compose up -d
+  register: docker_up_result
+  changed_when: "'Creating' in docker_up_result.stdout or docker_up_result.rc == 0"
+
+- name: Wait for Woodpecker Server to be ready
+  wait_for:
+    port: "{{ woodpecker_port }}"
+    delay: 5
+    timeout: 120
+
+- name: Display success message
+  debug:
+    msg: |
+      Woodpecker CI deployed successfully!
+      Web UI: https://ci.tantai.dev
+      Direct: http://{{ ansible_host }}:{{ woodpecker_port }}

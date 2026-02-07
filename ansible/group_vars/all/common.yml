@@ -1,0 +1,16 @@
+---
+# Shared variables for all hosts
+# This file is auto-loaded by Ansible for all inventory groups
+
+# Service IP addresses — single source of truth
+# Reference in other files as: "{{ service_ips.postgres }}", "{{ service_ips.storage }}", etc.
+service_ips:
+  postgres: "172.16.19.10"
+  storage: "172.16.21.10"
+  api_gateway: "192.168.1.101"
+  localstack: "172.16.21.20"
+  cicd: "172.16.21.21"
+  k3s_vip: "172.16.21.100"
+
+# Shared disk configuration
+data_disk_device: "/dev/sdb"

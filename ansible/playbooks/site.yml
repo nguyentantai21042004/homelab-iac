@@ -1,0 +1,21 @@
+# site.yml — Master playbook for full infrastructure setup
+#
+# Imports all service playbooks in dependency order.
+# Run with: ansible-playbook playbooks/site.yml
+#
+# Order rationale:
+#   1. postgres       — Database layer (needed by k3s, woodpecker)
+#   2. storage        — Object storage (MinIO + Zot registry)
+#   3. api-gateway    — Traefik reverse proxy
+#   4. k3s-cluster    — Kubernetes cluster (depends on postgres for external datastore)
+#   5. longhorn       — Distributed storage for k3s
+#   6. cicd           — Woodpecker CI (depends on postgres, registry)
+#   7. localstack     — AWS local emulator
+---
+- import_playbook: setup-postgres.yml
+- import_playbook: setup-storage.yml
+- import_playbook: setup-api-gateway.yml
+- import_playbook: setup-k3s-cluster.yml
+- import_playbook: setup-longhorn.yml
+- import_playbook: setup-cicd.yml
+- import_playbook: setup-localstack.yml

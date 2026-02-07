@@ -1,0 +1,89 @@
+---
+# Role: common
+# Basic VM configuration: timezone, hostname, /etc/hosts, static IP (netplan)
+
+# ===== Timezone =====
+- name: Set timezone
+  timezone:
+    name: "{{ common_timezone }}"
+
+- name: Sync system time
+  command: timedatectl set-ntp true
+  changed_when: false
+
+# ===== Hostname =====
+- name: Set hostname
+  hostname:
+    name: "{{ vm_hostname }}"
+  when: vm_hostname is defined
+
+- name: Update /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ vm_hostname }}"
+  when: vm_hostname is defined
+
+# ===== Static IP (conditional) =====
+- name: Create netplan config
+  copy:
+    dest: /etc/netplan/00-static-ip.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ens36:
+            addresses:
+              - {{ static_ip }}
+            routes:
+              - to: default
+                via: {{ gateway }}
+            nameservers:
+              addresses:
+      {% for dns in common_dns_servers %}
+                  - {{ dns }}
+      {% endfor %}
+          ens160:
+            addresses:
+              - {{ static_ip }}
+            routes:
+              - to: default
+                via: {{ gateway }}
+                metric: 200
+            nameservers:
+              addresses:
+      {% for dns in common_dns_servers %}
+                  - {{ dns }}
+      {% endfor %}
+    mode: "0600"
+  when: static_ip is defined
+  register: netplan_config
+
+- name: Remove old netplan configs
+  shell: find /etc/netplan -name "*.yaml" ! -name "00-static-ip.yaml" -delete
+  when:
+    - static_ip is defined
+    - netplan_config.changed
+
+- name: Apply netplan
+  command: netplan apply
+  async: 45
+  poll: 0
+  when:
+    - static_ip is defined
+    - netplan_config.changed
+
+- name: Update ansible_host to new IP
+  set_fact:
+    ansible_host: "{{ static_ip | regex_replace('/.*', '') }}"
+  when:
+    - static_ip is defined
+    - netplan_config.changed
+
+- name: Wait for connection with new IP
+  wait_for_connection:
+    delay: 5
+    timeout: 60
+  when:
+    - static_ip is defined
+    - netplan_config.changed

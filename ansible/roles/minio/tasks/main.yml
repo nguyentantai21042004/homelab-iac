@@ -1,0 +1,75 @@
+---
+# Tasks for minio role
+# Creates stack directories, templates .env + docker-compose + zot-config,
+# generates htpasswd, starts MinIO + Zot containers, and waits for ports.
+# NOTE: Docker install, kernel tuning, and data disk are handled by separate roles.
+
+- name: Create storage stack directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ storage_stack_path }}"
+    - "{{ storage_stack_path }}/config"
+
+- name: Template environment file
+  template:
+    src: .env.j2
+    dest: "{{ storage_stack_path }}/.env"
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ storage_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Template Zot config
+  template:
+    src: zot-config.json.j2
+    dest: "{{ storage_stack_path }}/zot-config.json"
+    mode: "0644"
+
+- name: Create Zot htpasswd file
+  shell: |
+    docker run --rm httpd:2.4-alpine htpasswd -Bbn {{ zot_auth_user }} {{ zot_auth_password }} > {{ storage_stack_path }}/htpasswd
+  args:
+    creates: "{{ storage_stack_path }}/htpasswd"
+
+- name: Stop existing containers
+  shell: |
+    cd {{ storage_stack_path }}
+    docker-compose down || true
+  register: docker_stop_result
+
+- name: Start MinIO + Zot containers
+  shell: |
+    cd {{ storage_stack_path }}
+    docker-compose up -d
+  register: docker_compose_result
+
+- name: Wait for MinIO to be ready
+  wait_for:
+    port: "{{ minio_port }}"
+    delay: 10
+    timeout: 60
+
+- name: Wait for Zot Registry to be ready
+  wait_for:
+    port: "{{ zot_port }}"
+    delay: 5
+    timeout: 60
+
+- name: Show services status
+  debug:
+    msg: |
+      Object Storage Services are running!
+
+      MinIO Console: http://{{ ansible_host }}:9001
+      MinIO API: http://{{ ansible_host }}:{{ minio_port }}
+      Zot Registry: http://{{ ansible_host }}:{{ zot_port }}
+
+      Data path: {{ storage_stack_path }}

@@ -1,8 +1,37 @@
-# ESXi Connection
+# ============================================================
+# Terraform Variables - Homelab Infrastructure
+# ============================================================
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+# ============================================================
+
+# ===== ESXi Connection =====
+# IP address or hostname of your ESXi server
 esxi_hostname = "192.168.1.x"
+
+# ESXi login username (default: "root")
 esxi_username = "root"
+
+# ESXi login password (sensitive - do NOT commit terraform.tfvars to git)
 esxi_password = "your-password-here"
 
-# VM Template (name of existing VM on ESXi to clone from)
+# ESXi SSH port (default: 22)
+# esxi_hostport = 22
+
+# ===== VM Template & Storage =====
+# Name of existing VM on ESXi to clone from (must exist on ESXi)
 clone_from_vm = "template-vm"
-disk_store    = "datastore1"
+
+# ESXi datastore name for VM disks (default: "datastore1")
+disk_store = "datastore1"
+
+# ===== K3s Cluster Config =====
+# Number of K3s cluster nodes to provision (default: 3)
+# k3s_node_count = 3
+
+# K3s node VM specifications: CPU cores and RAM in MB (default: 4 CPU, 8GB RAM)
+# Adjust based on your workload requirements (Rancher + Longhorn + headroom)
+# k3s_vm_specs = {
+#   cpu = 4
+#   ram = 8192
+# }

@@ -5,10 +5,10 @@
 k3s_channel: "v1.34"
 
 # External PostgreSQL Datastore (Optimization: no embedded etcd)
-datastore_endpoint: "postgres://k3s_master:{{ vault_k3s_db_password }}@172.16.19.10:5432/k3s"
+datastore_endpoint: "postgres://k3s_master:{{ vault_k3s_db_password }}@{{ service_ips.postgres }}:5432/k3s"
 
 # Kube-VIP Configuration (HA Control Plane)
-vip_address: "172.16.21.100"
+vip_address: "{{ service_ips.k3s_vip }}"
 vip_interface: "ens36"
 
 # K3s Server Arguments
