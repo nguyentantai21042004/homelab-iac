@@ -38,23 +38,23 @@ Mỗi playbook chỉ khai báo **hosts** và **roles** — không có inline tas
 
 ### Base Roles (dùng chung)
 
-| Role | Chức năng | Defaults |
-|------|-----------|----------|
-| `common` | hostname, timezone, static IP (netplan) | `common_timezone: "Asia/Ho_Chi_Minh"` |
-| `docker` | Cài Docker, daemon.json, log rotation | `overlay2`, `json-file`, `max-size: 10m` |
-| `data-disk` | Format + mount data disk (idempotent) | `/dev/sdb`, `/mnt/data`, `ext4` |
-| `kernel-tuning` | Apply sysctl params (skip nếu rỗng) | `sysctl_params: []` |
+| Role            | Chức năng                               | Defaults                                 |
+| --------------- | --------------------------------------- | ---------------------------------------- |
+| `common`        | hostname, timezone, static IP (netplan) | `common_timezone: "Asia/Ho_Chi_Minh"`    |
+| `docker`        | Cài Docker, daemon.json, log rotation   | `overlay2`, `json-file`, `max-size: 10m` |
+| `data-disk`     | Format + mount data disk (idempotent)   | `/dev/sdb`, `/mnt/data`, `ext4`          |
+| `kernel-tuning` | Apply sysctl params (skip nếu rỗng)     | `sysctl_params: []`                      |
 
 ### Service Roles
 
-| Role | Chức năng | Templates |
-|------|-----------|-----------|
-| `postgres` | PostgreSQL container + RBAC init | `docker-compose.yml.j2` |
-| `minio` | MinIO + Zot Registry | `.env.j2`, `docker-compose.yml.j2`, `zot-config.json.j2` |
-| `traefik` | Traefik reverse proxy + Let's Encrypt | `traefik.yml.j2`, `dynamic_conf.yml.j2`, `docker-compose.yml.j2` |
-| `k3s` | K3s HA cluster + Kube-VIP | `kube-vip.yaml.j2`, `traefik-config.yaml.j2` |
-| `woodpecker` | Woodpecker CI (server + agent) | `docker-compose.yml.j2` |
-| `localstack` | LocalStack Pro | `docker-compose.yml.j2` |
+| Role         | Chức năng                             | Templates                                                        |
+| ------------ | ------------------------------------- | ---------------------------------------------------------------- |
+| `postgres`   | PostgreSQL container + RBAC init      | `docker-compose.yml.j2`                                          |
+| `minio`      | MinIO + Zot Registry                  | `.env.j2`, `docker-compose.yml.j2`, `zot-config.json.j2`         |
+| `traefik`    | Traefik reverse proxy + Let's Encrypt | `traefik.yml.j2`, `dynamic_conf.yml.j2`, `docker-compose.yml.j2` |
+| `k3s`        | K3s HA cluster + Kube-VIP             | `kube-vip.yaml.j2`, `traefik-config.yaml.j2`                     |
+| `woodpecker` | Woodpecker CI (server + agent)        | `docker-compose.yml.j2`                                          |
+| `localstack` | LocalStack Pro                        | `docker-compose.yml.j2`                                          |
 
 ## Dependency Graph
 
@@ -116,10 +116,23 @@ ansible-playbook playbooks/setup-localstack.yml
 ### Utility playbooks
 
 ```bash
-ansible-playbook playbooks/postgres-add-database.yml -e "db_name=myapp"
+# Add new database with multi-tenant isolation
+ansible-playbook playbooks/postgres-add-database.yml \
+  -e "db_name=myapp" \
+  -e "master_pwd=xxx" \
+  -e "prod_pwd=yyy"
+
+# Verify multi-tenant isolation (security test)
+ansible-playbook playbooks/postgres-verify-isolation.yml
+
+# Change PostgreSQL passwords
 ansible-playbook playbooks/postgres-change-password.yml
+
+# Export K3s kubeconfig
 ansible-playbook playbooks/export-kubeconfig.yml
 ```
+
+**📖 PostgreSQL Multi-tenant Guide:** See [documents/postgres-multi-tenant.md](../documents/postgres-multi-tenant.md) for detailed architecture and security model.
 
 ## Vault (Secrets)
 

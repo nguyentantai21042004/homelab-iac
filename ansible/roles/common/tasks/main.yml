@@ -25,6 +25,12 @@
   when: vm_hostname is defined
 
 # ===== Static IP (conditional) =====
+- name: Detect active network interface
+  shell: "ip -o link show | awk -F': ' '{print $2}' | grep -E '^en|^eth' | head -1"
+  register: detected_interface
+  changed_when: false
+  when: static_ip is defined
+
 - name: Create netplan config
   copy:
     dest: /etc/netplan/00-static-ip.yaml
@@ -32,24 +38,12 @@
       network:
         version: 2
         ethernets:
-          ens36:
+          {{ detected_interface.stdout }}:
             addresses:
               - {{ static_ip }}
             routes:
               - to: default
                 via: {{ gateway }}
-            nameservers:
-              addresses:
-      {% for dns in common_dns_servers %}
-                  - {{ dns }}
-      {% endfor %}
-          ens160:
-            addresses:
-              - {{ static_ip }}
-            routes:
-              - to: default
-                via: {{ gateway }}
-                metric: 200
             nameservers:
               addresses:
       {% for dns in common_dns_servers %}

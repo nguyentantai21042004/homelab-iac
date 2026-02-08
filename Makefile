@@ -10,7 +10,7 @@ GREEN = \033[0;32m
 BLUE = \033[0;34m
 NC = \033[0m # No Color
 
-.PHONY: help sync-start sync-stop sync-status apply
+.PHONY: help sync-start sync-stop sync-status apply apply-postgres destroy-postgres init output
 
 # Default target
 help: ## Show available commands
@@ -30,10 +30,21 @@ sync-status: ## Show Mutagen sync status
 	@echo "$(BLUE)Mutagen sync status:$(NC)"
 	@mutagen sync list || echo "No sync sessions running"
 
-apply: ## Apply terraform via Admin VM
+apply: ## Apply terraform via Admin VM (all modules)
 	@echo "$(BLUE)Applying terraform via Admin VM...$(NC)"
 	./scripts/remote-apply.sh $(ADMIN_VM_IP) $(ADMIN_VM_USER)
 
+apply-postgres: ## Apply terraform for PostgreSQL only
+	@echo "$(BLUE)Applying PostgreSQL module via Admin VM...$(NC)"
+	./scripts/remote-apply-postgres.sh $(ADMIN_VM_IP) $(ADMIN_VM_USER)
+
+destroy-postgres: ## Destroy PostgreSQL VM
+	@echo "$(BLUE)Destroying PostgreSQL module via Admin VM...$(NC)"
+	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.postgres -auto-approve"
+
+output: ## Output terraform on Admin VM
+	@echo "$(BLUE)Outputing terraform on Admin VM...$(NC)"
+	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform output"
 init: ## Initialize terraform on Admin VM  
 	@echo "$(BLUE)Initializing terraform on Admin VM...$(NC)"
 	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform init"

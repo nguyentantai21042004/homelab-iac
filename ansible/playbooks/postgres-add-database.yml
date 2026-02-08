@@ -28,8 +28,18 @@
       copy:
         dest: /tmp/add-{{ db_name }}.sql
         content: |
+          -- ============================================================
+          -- Auto-generated Database Setup Script
+          -- Database: {{ db_name }}
+          -- Generated: {{ ansible_date_time.iso8601 }}
+          -- ============================================================
+
           -- Create database
           CREATE DATABASE {{ db_name }};
+
+          -- 🔒 CRITICAL: Revoke PUBLIC access (Multi-tenant Isolation)
+          REVOKE ALL ON DATABASE {{ db_name }} FROM PUBLIC;
+          REVOKE CONNECT ON DATABASE {{ db_name }} FROM PUBLIC;
 
           -- Create users
           CREATE USER {{ db_name }}_master WITH PASSWORD '{{ master_pwd }}';
@@ -40,7 +50,7 @@
           -- Connect to new database
           \c {{ db_name }}
 
-          -- Grant connect
+          -- 🔒 Grant EXPLICIT connect only to {{ db_name }} users (Zero Trust)
           GRANT CONNECT ON DATABASE {{ db_name }} TO {{ db_name }}_master, {{ db_name }}_dev, {{ db_name }}_prod, {{ db_name }}_readonly;
 
           -- MASTER: Full ownership
@@ -56,6 +66,8 @@
           GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {{ db_name }}_dev;
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ db_name }}_dev;
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {{ db_name }}_dev;
+          -- Allow CREATE TABLE, ALTER TABLE (explicit grant for DDL operations)
+          GRANT CREATE ON SCHEMA public TO {{ db_name }}_dev;
 
           -- PROD: CRUD only
           GRANT USAGE ON SCHEMA public TO {{ db_name }}_prod;
@@ -83,13 +95,21 @@
     - name: Show result
       debug:
         msg: |
-          Database '{{ db_name }}' created successfully!
+          ✅ Database '{{ db_name }}' created successfully with MULTI-TENANT ISOLATION!
 
-          Users created:
-            - {{ db_name }}_master   (Full access)
-            - {{ db_name }}_dev      (Create/Alter, CRUD)
-            - {{ db_name }}_prod     (CRUD only)
-            - {{ db_name }}_readonly (SELECT only)
+          🔒 Security Status:
+            - PUBLIC access REVOKED (other databases cannot access this DB)
+            - Only explicit users can connect
 
-          Connection string:
-            postgresql://{{ db_name }}_prod:xxx@{{ ansible_host }}:5432/{{ db_name }}
+          👥 Users created:
+            - {{ db_name }}_master   (Full access - owner)
+            - {{ db_name }}_dev      (Create/Alter tables, CRUD)
+            - {{ db_name }}_prod     (CRUD only - recommended for apps)
+            - {{ db_name }}_readonly (SELECT only - for analytics)
+
+          🔌 Connection string (production):
+            postgresql://{{ db_name }}_prod:{{ prod_pwd }}@{{ ansible_host }}:5432/{{ db_name }}
+
+          🧪 Test isolation (verify other users cannot access):
+            psql -U kanban_master -d {{ db_name }} -c "SELECT 1;"
+            Expected: ERROR: permission denied

@@ -5,10 +5,20 @@
 -- ============================================================
 
 -- ============================================================
--- 1. CREATE DATABASES
+-- 1. CREATE DATABASES & REVOKE PUBLIC ACCESS (Multi-tenant Isolation)
 -- ============================================================
+
+-- KANBAN Database
 CREATE DATABASE kanban;
+-- 🔒 CRITICAL: Revoke default PUBLIC access (prevent cross-tenant access)
+REVOKE ALL ON DATABASE kanban FROM PUBLIC;
+REVOKE CONNECT ON DATABASE kanban FROM PUBLIC;
+
+-- SMAP_IDENTITY Database
 CREATE DATABASE smap_identity;
+-- 🔒 CRITICAL: Revoke default PUBLIC access (prevent cross-tenant access)
+REVOKE ALL ON DATABASE smap_identity FROM PUBLIC;
+REVOKE CONNECT ON DATABASE smap_identity FROM PUBLIC;
 
 -- ============================================================
 -- 2. CREATE ROLES (Reusable permission groups)
@@ -39,7 +49,7 @@ CREATE USER kanban_readonly WITH PASSWORD 'kanban_readonly';
 -- Connect to kanban database for permission setup
 \c kanban
 
--- Grant connect to all users
+-- 🔒 Grant EXPLICIT connect only to kanban users (Zero Trust principle)
 GRANT CONNECT ON DATABASE kanban TO kanban_master, kanban_dev, kanban_prod, kanban_readonly;
 
 -- MASTER: Full ownership
@@ -87,7 +97,7 @@ CREATE USER smap_identity_readonly WITH PASSWORD 'smap_identity_readonly';
 -- Connect to smap_identity database for permission setup
 \c smap_identity
 
--- Grant connect to all users
+-- 🔒 Grant EXPLICIT connect only to smap_identity users (Zero Trust principle)
 GRANT CONNECT ON DATABASE smap_identity TO smap_identity_master, smap_identity_dev, smap_identity_prod, smap_identity_readonly;
 
 -- MASTER: Full ownership
@@ -119,9 +129,15 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO smap_identity_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO smap_identity_readonly;
 
 -- ============================================================
--- 5. SUMMARY
+-- 5. SECURITY VERIFICATION & SUMMARY
 -- ============================================================
 -- 
+-- ✅ MULTI-TENANT ISOLATION ACHIEVED:
+--   - Each database has PUBLIC access REVOKED
+--   - Only explicit users can CONNECT to their database
+--   - kanban_master CANNOT connect to smap_identity
+--   - smap_identity_prod CANNOT connect to kanban
+--
 -- KANBAN DATABASE:
 --   kanban_master   - Full access (owner)
 --   kanban_dev      - Create/Alter tables, CRUD
@@ -134,4 +150,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO smap_identit
 --   smap_identity_prod     - CRUD only
 --   smap_identity_readonly - SELECT only
 --
+-- 🧪 TEST ISOLATION (Run these commands to verify):
+--   psql -U kanban_master -d smap_identity -c "SELECT 1;"
+--   Expected: ERROR: permission denied for database "smap_identity"
+--
+--   psql -U smap_identity_prod -d kanban -c "SELECT 1;"
+--   Expected: ERROR: permission denied for database "kanban"
 -- ============================================================

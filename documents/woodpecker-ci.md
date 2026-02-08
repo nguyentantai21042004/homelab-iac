@@ -55,8 +55,12 @@ VM được khởi tạo bằng module `esxi-vm` tiêu chuẩn.
 
 ```bash
 ansible-playbook playbooks/postgres-add-database.yml \
-  -e "db_name=woodpecker db_user=woodpecker db_password=<YOUR_PASSWORD>"
+  -e "db_name=woodpecker" \
+  -e "master_pwd=<MASTER_PASSWORD>" \
+  -e "prod_pwd=<PROD_PASSWORD>"
 ```
+
+**Lưu ý:** Database sẽ được tạo với **multi-tenant isolation** (user của database khác không thể truy cập). Xem chi tiết tại [postgres-multi-tenant.md](postgres-multi-tenant.md).
 
 ### 3.3 Cập nhật Vault Secrets
 

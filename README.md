@@ -506,12 +506,17 @@ terraform plan
 
 ## Tài liệu bổ sung / Additional Docs
 
+### Quick Usage Guides
+- **[PostgreSQL Quick Start](usage/postgres.md)** ⚡ - Hướng dẫn sử dụng nhanh + Ma trận quyền hạn
+
+### Full Documentation
 - [Ansible Roles & Playbooks Guide](ansible/README.md)
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
-- [PostgreSQL Server Setup](documents/postgres.md)
+- **[PostgreSQL Multi-tenant Guide](documents/postgres.md)** ⭐
 - [MinIO + Zot Registry Setup](documents/minio-zot.md)
 - [API Gateway (Traefik) Setup](documents/api-gateway.md)
 - [K3s HA Cluster Setup](documents/k3s-cluster.md)
 - [Longhorn Storage Guide](documents/longhorn.md)
 - [Jinja2 Templates Guide](documents/jinja2-templates.md)
 - [Mutagen - Cơ chế hoạt động / How it works](documents/mutagen.md)
+- [Woodpecker CI Setup](documents/woodpecker-ci.md)

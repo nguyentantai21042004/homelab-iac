@@ -1,0 +1,59 @@
+---
+# Playbook: Fix network interface after VM clone
+# Usage: ansible-playbook playbooks/fix-network.yml -l <hostname>
+
+- name: Fix network interface
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Detect active network interface
+      shell: "ip -o link show | awk -F': ' '{print $2}' | grep -E '^en|^eth' | head -1"
+      register: detected_interface
+      changed_when: false
+
+    - name: Show detected interface
+      debug:
+        msg: "Detected interface: {{ detected_interface.stdout }}"
+
+    - name: Create netplan config for all interfaces
+      copy:
+        dest: /etc/netplan/00-installer-config.yaml
+        content: |
+          network:
+            version: 2
+            ethernets:
+              # Match all ethernet interfaces
+              all-en:
+                match:
+                  name: "en*"
+                dhcp4: true
+                dhcp-identifier: mac
+              all-ens:
+                match:
+                  name: "ens*"
+                dhcp4: true
+                dhcp-identifier: mac
+              all-eth:
+                match:
+                  name: "eth*"
+                dhcp4: true
+                dhcp-identifier: mac
+        mode: "0644"
+
+    - name: Apply netplan
+      command: netplan apply
+
+    - name: Wait for network to be ready
+      wait_for:
+        timeout: 10
+
+    - name: Get IP address
+      shell: ip -4 addr show {{ detected_interface.stdout }} | grep -oP '(?<=inet\s)\d+(\.\d+){3}'
+      register: vm_ip
+      changed_when: false
+      failed_when: false
+
+    - name: Show IP address
+      debug:
+        msg: "VM IP: {{ vm_ip.stdout | default('No IP yet') }}"

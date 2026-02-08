@@ -1,0 +1,73 @@
+---
+# Playbook: Verify PostgreSQL Multi-tenant Isolation
+# Usage: ansible-playbook playbooks/postgres-verify-isolation.yml
+# Purpose: Test that users from DB A cannot access DB B
+
+- name: Verify PostgreSQL Multi-tenant Isolation
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+
+  vars:
+    # Test matrix: Try to access DB B using user from DB A
+    test_cases:
+      - { user: "kanban_master", password: "kanban_master", target_db: "smap_identity", should_fail: true }
+      - { user: "smap_identity_prod", password: "smap_identity_prod", target_db: "kanban", should_fail: true }
+      - { user: "kanban_prod", password: "kanban_prod", target_db: "kanban", should_fail: false }
+      - { user: "smap_identity_master", password: "smap_identity_master", target_db: "smap_identity", should_fail: false }
+
+  tasks:
+    - name: Test cross-database access (should fail)
+      shell: |
+        PGPASSWORD="{{ item.password }}" psql -h localhost -U {{ item.user }} -d {{ item.target_db }} -c "SELECT 1;" 2>&1
+      register: test_result
+      failed_when: false
+      changed_when: false
+      loop: "{{ test_cases }}"
+      loop_control:
+        label: "{{ item.user }} -> {{ item.target_db }}"
+
+    - name: Analyze results
+      set_fact:
+        test_summary: |
+          {% set results = [] %}
+          {% for item in test_result.results %}
+          {% set test = test_cases[loop.index0] %}
+          {% set failed = 'permission denied' in item.stdout or 'FATAL' in item.stdout %}
+          {% set expected = test.should_fail %}
+          {% set status = '✅ PASS' if (failed == expected) else '❌ FAIL' %}
+          {% set _ = results.append({
+            'test': test.user + ' -> ' + test.target_db,
+            'expected': 'DENY' if expected else 'ALLOW',
+            'actual': 'DENIED' if failed else 'ALLOWED',
+            'status': status
+          }) %}
+          {% endfor %}
+          {{ results | to_nice_yaml }}
+
+    - name: Display test results
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║  PostgreSQL Multi-tenant Isolation Test Results               ║
+          ╚════════════════════════════════════════════════════════════════╝
+
+          {{ test_summary }}
+
+          Legend:
+            ✅ PASS = Behavior matches expectation
+            ❌ FAIL = Security violation detected
+
+    - name: Check if all tests passed
+      assert:
+        that:
+          - "'❌ FAIL' not in test_summary"
+        fail_msg: |
+          ⚠️  SECURITY VIOLATION DETECTED!
+          Some users can access databases they shouldn't.
+          Review the test results above and check RBAC configuration.
+        success_msg: |
+          ✅ All isolation tests PASSED!
+          Multi-tenant security is working correctly.

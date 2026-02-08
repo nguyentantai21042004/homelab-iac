@@ -1,11 +1,11 @@
 #!/bin/bash
-# Script: Run terraform apply on Admin VM
+# Script: Run terraform apply for PostgreSQL only on Admin VM
 
-ADMIN_VM_IP="${1:-admin-vm}"
+ADMIN_VM_IP="${1:-192.168.1.100}"
 ADMIN_VM_USER="${2:-tantai}"
 REMOTE_PATH="/home/${ADMIN_VM_USER}/homelab-iac/terraform"
 
-echo "Running terraform apply on ${ADMIN_VM_IP}..."
+echo "Running terraform apply -target=module.postgres on ${ADMIN_VM_IP}..."
 
 # Check if sync is running
 if ! mutagen sync list | grep -q "homelab-iac"; then
@@ -28,5 +28,6 @@ auto_unlock_terraform
 # Always run terraform init to ensure providers are up-to-date
 terraform init
 
-terraform apply -auto-approve
+# Apply only PostgreSQL module with auto-approve
+terraform apply -target=module.postgres -auto-approve
 EOF
