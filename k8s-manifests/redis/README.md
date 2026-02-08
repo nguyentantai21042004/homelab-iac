@@ -28,26 +28,26 @@ Stack này bao gồm **Redis** (in-memory database) và **Redis Sentinel** để
 ## Kiến Trúc
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              Redis HA Cluster                       │
-│                                                     │
+┌───────────────────────────────────────────────────┐
+│              Redis HA Cluster                     │
+│                                                   │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
 │  │ Redis-0  │  │ Redis-1  │  │ Redis-2  │         │
 │  │ (Master) │◄─┤ (Replica)│◄─┤ (Replica)│         │
 │  └────┬─────┘  └──────────┘  └──────────┘         │
-│       │                                            │
-│       │  Monitored by                              │
-│       ▼                                            │
+│       │                                           │
+│       │  Monitored by                             │
+│       ▼                                           │
 │  ┌─────────────────────────────────┐              │
 │  │     Redis Sentinel Cluster      │              │
-│  │  ┌──────┐ ┌──────┐ ┌──────┐    │              │
-│  │  │Sent-0│ │Sent-1│ │Sent-2│    │              │
-│  │  └──────┘ └──────┘ └──────┘    │              │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐     │              │
+│  │  │Sent-0│ │Sent-1│ │Sent-2│     │              │
+│  │  └──────┘ └──────┘ └──────┘     │              │
 │  └─────────────────────────────────┘              │
-│                                                     │
-│  Auto Failover: Nếu Master down,                   │
-│  Sentinel promote 1 Replica thành Master mới       │
-└─────────────────────────────────────────────────────┘
+│                                                   │
+│  Auto Failover: Nếu Master down,                  │
+│  Sentinel promote 1 Replica thành Master mới      │
+└───────────────────────────────────────────────────┘
 ```
 
 **Cấu hình:**

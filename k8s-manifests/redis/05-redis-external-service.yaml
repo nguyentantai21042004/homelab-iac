@@ -1,0 +1,40 @@
+---
+# Redis LoadBalancer Service - Expose với IP cố định từ MetalLB
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-lb
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.21.200
+spec:
+  type: LoadBalancer
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: redis
+---
+# Sentinel LoadBalancer Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel-lb
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis-sentinel
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.21.201
+spec:
+  type: LoadBalancer
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: 26379
+      protocol: TCP
+  selector:
+    app: redis-sentinel

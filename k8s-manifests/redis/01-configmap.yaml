@@ -58,6 +58,9 @@ data:
     bind 0.0.0.0
     port 26379
     
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    
     sentinel monitor mymaster redis-0.redis.NAMESPACE_NAME.svc.cluster.local 6379 2
     sentinel down-after-milliseconds mymaster 5000
     sentinel parallel-syncs mymaster 1
