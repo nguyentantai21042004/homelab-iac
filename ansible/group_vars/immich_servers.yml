@@ -1,0 +1,31 @@
+---
+# Immich Server Configuration
+
+# Data disk configuration
+data_disk_device: "/dev/sdb"
+immich_data_path: "/mnt/media"
+
+# Immich stack configuration
+immich_stack_path: "/opt/immich"
+
+# Immich version
+immich_version: "release"
+
+# Database configuration
+immich_db_password: "{{ vault_immich_db_password }}"
+immich_db_username: "postgres"
+immich_db_name: "immich"
+
+# Immich port (exposed on host)
+immich_port: 2283
+
+# Storage paths (on data disk)
+immich_upload_location: "{{ immich_data_path }}/immich/library"
+immich_db_location: "{{ immich_data_path }}/immich/postgres"
+
+# WireGuard VPN configuration
+wireguard_enabled: true
+wireguard_stack_path: "/opt/wireguard"
+wireguard_password_hash: "{{ vault_wireguard_password_hash }}"
+wireguard_port: 51820
+wireguard_ui_port: 51821
