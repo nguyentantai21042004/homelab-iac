@@ -433,7 +433,6 @@ metadata:
 **Last Updated:** 2026-02-08  
 **Maintained by:** Homelab Infrastructure Team
 
-
 # Resource Planning & Configuration Guide
 
 ## 📊 Tổng Quan Resource Consumption
