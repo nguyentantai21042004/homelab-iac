@@ -1,10 +1,16 @@
 version: "3.8"
 
+networks:
+  storage-net:
+    driver: bridge
+
 services:
   minio:
     image: quay.io/minio/minio:RELEASE.2024-03-30T09-41-56Z
     container_name: minio
     restart: always
+    networks:
+      - storage-net
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -12,7 +18,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
-      - /mnt/minio_data:/data
+      - {{ storage_data_path }}/minio:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -22,12 +28,17 @@ services:
 
   createbuckets:
     image: minio/mc:RELEASE.2024-02-24T01-33-20Z
+    container_name: minio-mc
+    networks:
+      - storage-net
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      until (/usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
       /usr/bin/mc mb --ignore-existing myminio/zot-registry;
+      /usr/bin/mc anonymous set download myminio/zot-registry;
       exit 0;
       "
 
@@ -35,14 +46,18 @@ services:
     image: {{ zot_image | default('ghcr.io/project-zot/zot-linux-amd64:v2.1.1') }}
     container_name: zot-registry
     restart: always
+    networks:
+      - storage-net
     ports:
       - "5000:5000"
     volumes:
-      - ./zot-config.json:/etc/zot/config.json:ro
-      - ./htpasswd:/etc/zot/htpasswd:ro
+      - {{ storage_stack_path }}/zot-config.json:/etc/zot/config.json:ro
+      - {{ storage_stack_path }}/htpasswd:/etc/zot/htpasswd:ro
     depends_on:
-      - minio
-      - createbuckets
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
     command: ["serve", "/etc/zot/config.json"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/v2/"]

@@ -12,12 +12,13 @@
   loop:
     - "{{ storage_stack_path }}"
     - "{{ storage_stack_path }}/config"
+    - "{{ storage_data_path }}/minio"
 
 - name: Template environment file
   template:
     src: .env.j2
     dest: "{{ storage_stack_path }}/.env"
-    mode: "0644"
+    mode: "0600"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
 
@@ -39,17 +40,26 @@
   args:
     creates: "{{ storage_stack_path }}/htpasswd"
 
+- name: Set htpasswd file permissions
+  file:
+    path: "{{ storage_stack_path }}/htpasswd"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
 - name: Stop existing containers
   shell: |
     cd {{ storage_stack_path }}
     docker-compose down || true
   register: docker_stop_result
+  changed_when: "'Stopping' in docker_stop_result.stdout or 'Removing' in docker_stop_result.stdout"
 
 - name: Start MinIO + Zot containers
   shell: |
     cd {{ storage_stack_path }}
     docker-compose up -d
   register: docker_compose_result
+  changed_when: "'Creating' in docker_compose_result.stdout or 'Starting' in docker_compose_result.stdout"
 
 - name: Wait for MinIO to be ready
   wait_for:
@@ -71,5 +81,12 @@
       MinIO Console: http://{{ ansible_host }}:9001
       MinIO API: http://{{ ansible_host }}:{{ minio_port }}
       Zot Registry: http://{{ ansible_host }}:{{ zot_port }}
+      Zot UI: http://{{ ansible_host }}:{{ zot_port }}/home
+      Metrics: http://{{ ansible_host }}:{{ zot_port }}/metrics
 
-      Data path: {{ storage_stack_path }}
+      Credentials:
+      - MinIO: {{ minio_root_user }} / {{ minio_root_password }}
+      - Zot: {{ zot_auth_user }} / [configured]
+
+      Data path: {{ storage_data_path }}/minio
+      Stack path: {{ storage_stack_path }}

@@ -2,7 +2,10 @@
   "distSpecVersion": "1.1.0-dev",
   "storage": {
     "rootDirectory": "/var/lib/zot",
-    "dedupe": false,
+    "dedupe": true,
+    "gc": true,
+    "gcDelay": "1h",
+    "gcInterval": "24h",
     "remoteCache": false,
     "storageDriver": {
       "name": "s3",
@@ -24,10 +27,24 @@
       "htpasswd": {
         "path": "/etc/zot/htpasswd"
       }
+    },
+    "accessControl": {
+      "repositories": {
+        "**": {
+          "policies": [
+            {
+              "users": ["{{ zot_auth_user }}"],
+              "actions": ["read", "create", "update", "delete"]
+            }
+          ],
+          "defaultPolicy": ["read"]
+        }
+      }
     }
   },
   "log": {
-    "level": "info"
+    "level": "info",
+    "output": "/dev/stdout"
   },
   "extensions": {
     "ui": {
@@ -35,6 +52,12 @@
     },
     "search": {
       "enable": true
+    },
+    "metrics": {
+      "enable": true,
+      "prometheus": {
+        "path": "/metrics"
+      }
     }
   }
 }

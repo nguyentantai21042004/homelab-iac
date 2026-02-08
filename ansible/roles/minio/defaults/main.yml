@@ -3,7 +3,7 @@
 
 # MinIO credentials (should be overridden via vault or group_vars)
 minio_root_user: "tantai"
-minio_root_password: "{{ vault_minio_password | default('ChangeMeInProduction!') }}"
+minio_root_password: "{{ vault_minio_password | default('21042004') }}"
 
 # Storage paths
 storage_data_path: "/mnt/storage_data"
@@ -14,7 +14,7 @@ zot_image: "ghcr.io/project-zot/zot-linux-amd64:v2.1.1"
 
 # Zot Registry authentication (should be overridden via vault or group_vars)
 zot_auth_user: "tantai"
-zot_auth_password: "{{ vault_zot_password | default('ChangeMeInProduction!') }}"
+zot_auth_password: "{{ vault_zot_password | default('21042004') }}"
 
 # Ports for wait_for checks
 minio_port: 9000

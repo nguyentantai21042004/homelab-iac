@@ -38,6 +38,15 @@ ansible/group_vars/all/vault.yml
 # Retry files
 *.retry
 
+# ===== Credentials & Secrets =====
+CREDENTIALS.md
+CREDENTIALS.txt
+credentials.*
+secrets.*
+.env
+.env.*
+!.env.example
+
 # ===== IDE =====
 .idea/
 .vscode/

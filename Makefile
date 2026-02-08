@@ -4,13 +4,14 @@
 # Variables
 ADMIN_VM_IP ?= 192.168.1.100
 ADMIN_VM_USER ?= tantai
+SSH_PASS ?= 21042004
 
 # Colors for output
 GREEN = \033[0;32m
 BLUE = \033[0;34m
 NC = \033[0m # No Color
 
-.PHONY: help sync-start sync-stop sync-status apply apply-postgres destroy-postgres init output
+.PHONY: help sync-start sync-stop sync-status apply apply-postgres apply-storage destroy-postgres destroy-storage init output
 
 # Default target
 help: ## Show available commands
@@ -38,13 +39,21 @@ apply-postgres: ## Apply terraform for PostgreSQL only
 	@echo "$(BLUE)Applying PostgreSQL module via Admin VM...$(NC)"
 	./scripts/remote-apply-postgres.sh $(ADMIN_VM_IP) $(ADMIN_VM_USER)
 
+apply-storage: ## Apply terraform for Storage (MinIO + Zot) only
+	@echo "$(BLUE)Applying Storage module via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform apply -target=module.storage -auto-approve"
+
 destroy-postgres: ## Destroy PostgreSQL VM
 	@echo "$(BLUE)Destroying PostgreSQL module via Admin VM...$(NC)"
-	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.postgres -auto-approve"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.postgres -auto-approve"
+
+destroy-storage: ## Destroy Storage VM
+	@echo "$(BLUE)Destroying Storage module via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.storage -auto-approve"
 
 output: ## Output terraform on Admin VM
 	@echo "$(BLUE)Outputing terraform on Admin VM...$(NC)"
-	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform output"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform output"
 init: ## Initialize terraform on Admin VM  
 	@echo "$(BLUE)Initializing terraform on Admin VM...$(NC)"
-	ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform init"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform init"

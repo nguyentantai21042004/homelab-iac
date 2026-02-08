@@ -5,6 +5,7 @@
   hosts: storage_servers
   become: true
   roles:
+    - role: common
     - role: kernel-tuning
       vars:
         sysctl_params:
@@ -14,6 +15,6 @@
     - role: docker
     - role: data-disk
       vars:
-        data_mount_point: "{{ storage_data_path }}"
+        data_mount_point: "/mnt/storage_data"
         disk_fstype: xfs
     - role: minio
