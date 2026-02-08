@@ -1,0 +1,58 @@
+---
+# Playbook: Setup PostgreSQL database for K3s cluster
+# Creates database and user for K3s external datastore
+
+- name: Setup K3s Database in PostgreSQL
+  hosts: postgres_servers
+  become: true
+  vars:
+    db_name: "k3s"
+    db_user: "k3s_master"
+    db_password: "{{ vault_k3s_db_password | default('21042004') }}"
+
+  tasks:
+    - name: Create K3s database
+      shell: |
+        docker exec pg15_prod psql -U postgres -c "CREATE DATABASE {{ db_name }};"
+      register: create_db
+      failed_when: 
+        - create_db.rc != 0
+        - "'already exists' not in create_db.stderr"
+      changed_when: "'CREATE DATABASE' in create_db.stdout"
+
+    - name: Create K3s user
+      shell: |
+        docker exec pg15_prod psql -U postgres -c "CREATE USER {{ db_user }} WITH PASSWORD '{{ db_password }}';"
+      register: create_user
+      failed_when:
+        - create_user.rc != 0
+        - "'already exists' not in create_user.stderr"
+      changed_when: "'CREATE ROLE' in create_user.stdout"
+
+    - name: Grant privileges to K3s user
+      shell: |
+        docker exec pg15_prod psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE {{ db_name }} TO {{ db_user }};"
+      changed_when: false
+
+    - name: Grant schema privileges
+      shell: |
+        docker exec pg15_prod psql -U postgres -d {{ db_name }} -c "GRANT ALL ON SCHEMA public TO {{ db_user }};"
+      changed_when: false
+
+    - name: Verify database and user
+      shell: |
+        docker exec pg15_prod psql -U postgres -c "\l" | grep {{ db_name }}
+      register: verify_db
+      changed_when: false
+
+    - name: Show database info
+      debug:
+        msg: |
+          K3s database setup complete!
+          
+          Database: {{ db_name }}
+          User: {{ db_user }}
+          Password: {{ db_password }}
+          
+          Connection string:
+          postgres://{{ db_user }}:{{ db_password }}@{{ ansible_host }}:5432/{{ db_name }}

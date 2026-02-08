@@ -1,41 +1,30 @@
 ---
 # Playbook: Install Rancher on K3s cluster
-# - Install Helm
 # - Install cert-manager
-# - Install Rancher (3 replicas for HA)
+# - Install Rancher (1 replica for homelab)
 
 - name: Install Rancher
   hosts: k3s_servers[0] # Run on first node only
   become: true
   vars_files:
-    - ../group_vars/k3s_servers.yml
+    - ../group_vars/all/common.yml
     - ../group_vars/all/vault.yml
+    - ../group_vars/k3s_servers.yml
 
   vars:
     rancher_hostname: "rancher.tantai.dev"
     rancher_replicas: 1
-    cert_manager_version: "v1.17.0"
-    rancher_version: "2.13.1"
+    cert_manager_version: "v1.13.3"
+    rancher_version: "2.9.3"
+    rancher_password: "{{ vault_rancher_bootstrap_password | default('21042004') }}"
 
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
   tasks:
-    # ===== Install Helm =====
-    - name: Check if Helm is installed
-      command: which helm
-      register: helm_check
-      failed_when: false
-      changed_when: false
-
-    - name: Install Helm
-      shell: |
-        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      when: helm_check.rc != 0
-
     # ===== Install cert-manager =====
     - name: Add Jetstack Helm repo
-      command: helm repo add jetstack https://charts.jetstack.io
+      command: helm repo add jetstack https://charts.jetstack.io --force-update
       changed_when: false
 
     - name: Update Helm repos
@@ -48,22 +37,34 @@
       failed_when: false
       changed_when: false
 
+    - name: Install cert-manager CRDs
+      shell: |
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.crds.yaml
+      when: certmanager_ns.rc != 0
+
     - name: Install cert-manager
       shell: |
         helm install cert-manager jetstack/cert-manager \
           --namespace cert-manager \
           --create-namespace \
           --version {{ cert_manager_version }} \
-          --set installCRDs=true
+          --set crds.enabled=false
       when: certmanager_ns.rc != 0
 
     - name: Wait for cert-manager to be ready
-      shell: kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=120s
+      shell: kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=180s
       when: certmanager_ns.rc != 0
+      register: certmanager_wait
+      failed_when: false
+
+    - name: Delete failed startupapicheck job if exists
+      shell: kubectl delete job cert-manager-startupapicheck -n cert-manager --ignore-not-found=true
+      when: certmanager_ns.rc != 0
+      changed_when: false
 
     # ===== Install Rancher =====
     - name: Add Rancher Helm repo
-      command: helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
+      command: helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --force-update
       changed_when: false
 
     - name: Update Helm repos
@@ -84,11 +85,25 @@
 
     - name: Install Rancher
       shell: |
-        helm install rancher rancher-latest/rancher \
+        helm install rancher rancher-stable/rancher \
           --namespace cattle-system \
           --set hostname={{ rancher_hostname }} \
           --set replicas={{ rancher_replicas }} \
-          --set bootstrapPassword={{ vault_rancher_bootstrap_password | default('admin') }}
+          --set bootstrapPassword={{ rancher_password }} \
+          --set ingress.tls.source=rancher \
+          --set resources.requests.cpu=500m \
+          --set resources.requests.memory=512Mi \
+          --set resources.limits.cpu=2000m \
+          --set resources.limits.memory=2Gi \
+          --version {{ rancher_version }}
+      when: rancher_status.rc != 0
+
+    - name: Wait for Rancher deployment to exist
+      shell: kubectl get deployment rancher -n cattle-system
+      register: rancher_deploy
+      until: rancher_deploy.rc == 0
+      retries: 10
+      delay: 5
       when: rancher_status.rc != 0
 
     - name: Patch Rancher Startup Probe (Increase Timeout)
@@ -98,16 +113,30 @@
       when: rancher_status.rc != 0
 
     - name: Wait for Rancher to be ready
-      shell: kubectl wait --for=condition=Available deployment/rancher -n cattle-system --timeout=300s
+      shell: kubectl wait --for=condition=Available deployment/rancher -n cattle-system --timeout=600s
       when: rancher_status.rc != 0
+      register: rancher_wait
+      failed_when: false
+
+    - name: Get Rancher pod status
+      shell: kubectl get pods -n cattle-system -l app=rancher
+      register: rancher_pods
+      changed_when: false
 
     # ===== Display Access Info =====
-    - name: Get Rancher URL
+    - name: Show Rancher info
       debug:
         msg: |
           Rancher is installed!
 
           URL: https://{{ rancher_hostname }}
-          Bootstrap Password: {{ vault_rancher_bootstrap_password | default('admin') }}
+          Bootstrap Password: {{ rancher_password }}
 
-          Make sure DNS for {{ rancher_hostname }} points to VIP: {{ vip_address }}
+          DNS Setup:
+          Add to /etc/hosts: {{ vip_address }} {{ rancher_hostname }}
+          
+          Or configure DNS:
+          {{ rancher_hostname }} → {{ vip_address }}
+
+          Pods status:
+          {{ rancher_pods.stdout }}

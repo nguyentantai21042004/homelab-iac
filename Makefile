@@ -11,7 +11,7 @@ GREEN = \033[0;32m
 BLUE = \033[0;34m
 NC = \033[0m # No Color
 
-.PHONY: help sync-start sync-stop sync-status apply apply-postgres apply-storage destroy-postgres destroy-storage init output
+.PHONY: help sync-start sync-stop sync-status apply apply-postgres apply-storage apply-k3s destroy-postgres destroy-storage destroy-k3s init output
 
 # Default target
 help: ## Show available commands
@@ -43,6 +43,10 @@ apply-storage: ## Apply terraform for Storage (MinIO + Zot) only
 	@echo "$(BLUE)Applying Storage module via Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform apply -target=module.storage -auto-approve"
 
+apply-k3s: ## Apply terraform for K3s cluster (3 nodes)
+	@echo "$(BLUE)Applying K3s cluster via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform apply -target=module.k3s_nodes -auto-approve"
+
 destroy-postgres: ## Destroy PostgreSQL VM
 	@echo "$(BLUE)Destroying PostgreSQL module via Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.postgres -auto-approve"
@@ -50,6 +54,10 @@ destroy-postgres: ## Destroy PostgreSQL VM
 destroy-storage: ## Destroy Storage VM
 	@echo "$(BLUE)Destroying Storage module via Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.storage -auto-approve"
+
+destroy-k3s: ## Destroy K3s cluster
+	@echo "$(BLUE)Destroying K3s cluster via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.k3s_nodes -auto-approve"
 
 output: ## Output terraform on Admin VM
 	@echo "$(BLUE)Outputing terraform on Admin VM...$(NC)"

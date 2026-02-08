@@ -9,4 +9,17 @@
   hosts: k3s_servers
   become: true
   roles:
+    - role: common
+    - role: kernel-tuning
+      vars:
+        sysctl_params:
+          - { name: "vm.swappiness", value: "10" }
+          - { name: "vm.dirty_ratio", value: "15" }
+          - { name: "vm.dirty_background_ratio", value: "5" }
+          - { name: "fs.inotify.max_user_watches", value: "524288" }
+          - { name: "fs.inotify.max_user_instances", value: "512" }
+    - role: data-disk
+      vars:
+        data_mount_point: "/mnt/longhorn"
+        disk_fstype: xfs
     - role: k3s

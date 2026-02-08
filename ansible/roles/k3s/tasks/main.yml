@@ -17,6 +17,18 @@
     state: present
   loop: "{{ k3s_kernel_modules }}"
 
+- name: Persist kernel modules
+  copy:
+    dest: /etc/modules-load.d/k3s.conf
+    content: |
+      br_netfilter
+      overlay
+      ip_vs
+      ip_vs_rr
+      ip_vs_wrr
+      ip_vs_sh
+    mode: "0644"
+
 - name: Enable IP forwarding
   sysctl:
     name: "{{ item }}"
@@ -24,6 +36,15 @@
     state: present
     reload: yes
   loop: "{{ k3s_sysctl_params }}"
+
+- name: Detect active network interface
+  shell: "ip -o link show | awk -F': ' '{print $2}' | grep -E '^en|^eth' | head -1"
+  register: detected_interface
+  changed_when: false
+
+- name: Set VIP interface fact
+  set_fact:
+    vip_interface: "{{ detected_interface.stdout }}"
 
 # ===== Install K3s =====
 - name: Check if K3s is already installed
@@ -50,6 +71,11 @@
     timeout: "{{ k3s_install_timeout }}"
   when: k3s_install.changed
 
+- name: Set kubeconfig permissions
+  file:
+    path: "{{ k3s_config_path }}"
+    mode: "0644"
+
 # ===== Deploy Kube-VIP =====
 - name: Create manifests directory
   file:
@@ -61,12 +87,6 @@
   template:
     src: kube-vip.yaml.j2
     dest: "{{ k3s_manifests_dir }}/kube-vip.yaml"
-    mode: "0644"
-
-- name: Deploy Traefik HelmChartConfig
-  template:
-    src: traefik-config.yaml.j2
-    dest: "{{ k3s_manifests_dir }}/traefik-config.yaml"
     mode: "0644"
 
 # ===== Verify =====
@@ -91,4 +111,21 @@
 - name: Display cluster nodes
   debug:
     msg: "{{ cluster_status.stdout_lines }}"
+  run_once: true
+
+- name: Show K3s access info
+  debug:
+    msg: |
+      K3s cluster is ready!
+      
+      VIP Address: {{ vip_address }}
+      Interface: {{ vip_interface }}
+      
+      Access cluster:
+      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+      kubectl get nodes
+      
+      Or from local machine:
+      scp {{ ansible_user }}@{{ ansible_host }}:/etc/rancher/k3s/k3s.yaml ~/.kube/k3s-config
+      # Edit server URL to use VIP: https://{{ vip_address }}:6443
   run_once: true

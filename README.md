@@ -38,11 +38,11 @@ Provider `josenk/esxi` khi clone VM từ local sẽ download template về rồi
 | ------------- | ----------------- | ---------------------------------------------------------------------- |
 | **Terraform** | Dynamic Data Disk | Module tự tạo data disk nếu `data_disk_size > 0`, dùng `dynamic` block |
 | **Terraform** | Reusable Module   | 1 module `esxi-vm` cho mọi VM, chỉ đổi params                          |
-| **Ansible**   | Roles-based       | 10 roles tái sử dụng: 4 base + 6 service roles                        |
+| **Ansible**   | Roles-based       | 10 roles tái sử dụng: 4 base + 6 service roles                         |
 | **Ansible**   | 4-tier RBAC       | PostgreSQL tự tạo 4 users: master/dev/prod/readonly                    |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` cho DB/Storage                    |
 | **Ansible**   | Vault Secrets     | Password trong `group_vars/all/vault.yml`, encrypted                   |
-| **Ansible**   | site.yml          | 1 lệnh setup toàn bộ infra: `ansible-playbook playbooks/site.yml`     |
+| **Ansible**   | site.yml          | 1 lệnh setup toàn bộ infra: `ansible-playbook playbooks/site.yml`      |
 | **K3s HA**    | Cluster HA        | 3 Masters + External DB + Kube-VIP (172.16.21.100)                     |
 | **Storage**   | Distributed       | Longhorn Block Storage + S3 Backup                                     |
 | **Scripts**   | Auto-unlock       | Tự detect và force-unlock stale Terraform locks                        |
@@ -57,13 +57,20 @@ make sync-status   # Check sync status
 
 ### Dịch vụ Cluster (Access Info)
 
-Add vào `/etc/hosts`: `172.16.21.100 rancher.tantai.dev longhorn.tantai.dev`
+| Dịch vụ          | URL                          | User/Pass             | Docs                                |
+| ---------------- | ---------------------------- | --------------------- | ----------------------------------- |
+| **Rancher**      | `https://rancher.tantai.dev` | `admin` / `21042004`  | [Guide](usages/RANCHER_ACCESS.md)   |
+| **K3s API**      | `https://172.16.21.100:6443` | (kubeconfig)          | [Guide](usages/K3S_LOCAL_ACCESS.md) |
+| **PostgreSQL**   | `172.16.19.10:5432`          | `tantai` / `21042004` | [CREDENTIALS.md](CREDENTIALS.md)    |
+| **MinIO**        | `http://172.16.21.10:9001`   | `tantai` / `21042004` | [CREDENTIALS.md](CREDENTIALS.md)    |
+| **Zot Registry** | `http://172.16.21.10:5000`   | `tantai` / `21042004` | [CREDENTIALS.md](CREDENTIALS.md)    |
 
-| Dịch vụ | URL | User/Pass |
-|---------|-----|-----------|
-| **Rancher** | `https://rancher.tantai.dev` | `admin` / (trong vault) |
-| **Longhorn** | `http://longhorn.tantai.dev` | (No auth) |
-| **Traefik** | `http://172.16.21.100:8080` | (Dashboard) |
+**DNS Setup (Cloudflare):**
+
+```
+rancher.tantai.dev → 172.16.21.100 (A Record, DNS only)
+*.tantai.dev → 172.16.21.100 (Wildcard for future services)
+```
 
 ### Cấu trúc Project
 
@@ -292,7 +299,7 @@ The `josenk/esxi` provider downloads template to local then uploads back when cl
 | ------------- | ----------------- | --------------------------------------------------------------------------- |
 | **Terraform** | Dynamic Data Disk | Module auto-creates data disk if `data_disk_size > 0`, uses `dynamic` block |
 | **Terraform** | Reusable Module   | Single `esxi-vm` module for all VMs, just change params                     |
-| **Ansible**   | Roles-based       | 10 reusable roles: 4 base + 6 service roles                                |
+| **Ansible**   | Roles-based       | 10 reusable roles: 4 base + 6 service roles                                 |
 | **Ansible**   | 4-tier RBAC       | PostgreSQL auto-creates 4 users: master/dev/prod/readonly                   |
 | **Ansible**   | Kernel Tuning     | `vm.swappiness=10`, `dirty_ratio=15` for DB/Storage                         |
 | **Ansible**   | Vault Secrets     | Passwords in `group_vars/all/vault.yml`, encrypted                          |
@@ -507,9 +514,11 @@ terraform plan
 ## Tài liệu bổ sung / Additional Docs
 
 ### Quick Usage Guides
+
 - **[PostgreSQL Quick Start](usage/postgres.md)** ⚡ - Hướng dẫn sử dụng nhanh + Ma trận quyền hạn
 
 ### Full Documentation
+
 - [Ansible Roles & Playbooks Guide](ansible/README.md)
 - [Hướng dẫn thêm VM mới / Add New VM Guide](documents/add-vm-guide.md)
 - **[PostgreSQL Multi-tenant Guide](documents/postgres.md)** ⭐

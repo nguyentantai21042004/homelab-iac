@@ -2,21 +2,33 @@
 # Playbook: Install Longhorn for Distributed Block Storage
 # Usage: ansible-playbook playbooks/setup-longhorn.yml
 
-- name: Install Longhorn
+- name: Install Longhorn Prerequisites
+  hosts: k3s_servers
+  become: true
+  tasks:
+    - name: Install open-iscsi (required by Longhorn)
+      apt:
+        name: open-iscsi
+        state: present
+        update_cache: yes
+
+    - name: Start and enable iscsid service
+      systemd:
+        name: iscsid
+        state: started
+        enabled: yes
+
+- name: Install Longhorn via Helm
   hosts: k3s_servers[0]
   become: true
   vars:
     longhorn_version: "v1.5.3"
+    longhorn_data_path: "/mnt/longhorn"
 
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
   tasks:
-    # 1. Prerequisite Check (open-iscsi is mostly required for Longhorn)
-    # Note: Ubuntu standard cloud images usually have open-iscsi. K3s setup-vm might need to ensure this.
-    # We will assume it's present or installed via package manager if missing.
-
-    # 2. Add Helm Repo
     - name: Add Longhorn Helm repo
       command: helm repo add longhorn https://charts.longhorn.io
       changed_when: false
@@ -31,7 +43,6 @@
       failed_when: false
       changed_when: lh_ns.rc == 0
 
-    # 3. Install Longhorn
     - name: Check if Longhorn is installed
       command: helm status longhorn -n longhorn-system
       register: lh_status
@@ -43,14 +54,17 @@
         helm install longhorn longhorn/longhorn \
           --namespace longhorn-system \
           --version {{ longhorn_version }} \
-          --set defaultSettings.defaultDataPath="/var/lib/longhorn"
+          --set defaultSettings.defaultDataPath="{{ longhorn_data_path }}" \
+          --set defaultSettings.replicaSoftAntiAffinity=false \
+          --set defaultSettings.storageMinimalAvailablePercentage=10
       when: lh_status.rc != 0
 
-    - name: Wait for Longhorn UI to be ready
-      shell: kubectl wait --for=condition=Available deployment/longhorn-ui -n longhorn-system --timeout=300s
+    - name: Wait for Longhorn deployments to be ready
+      shell: kubectl wait --for=condition=Available deployment --all -n longhorn-system --timeout=600s
       when: lh_status.rc != 0
+      register: lh_wait
+      failed_when: false
 
-    # 4. Expose UI via Ingress (Traefik)
     - name: Create Ingress for Longhorn UI
       copy:
         dest: /tmp/longhorn-ingress.yaml
@@ -61,7 +75,7 @@
             name: longhorn-ingress
             namespace: longhorn-system
             annotations:
-              kubernetes.io/ingress.class: traefik
+              traefik.ingress.kubernetes.io/router.entrypoints: web
           spec:
             rules:
             - host: longhorn.tantai.dev
@@ -75,12 +89,22 @@
                       port:
                         number: 80
         mode: "0644"
-      when: lh_status.rc != 0
 
     - name: Apply Ingress
       command: kubectl apply -f /tmp/longhorn-ingress.yaml
-      when: lh_status.rc != 0
 
-    - name: Get Longhorn URL
+    - name: Get Longhorn status
+      shell: kubectl get pods -n longhorn-system
+      register: longhorn_pods
+      changed_when: false
+
+    - name: Show Longhorn info
       debug:
-        msg: "Longhorn is installing. Access UI at: http://longhorn.tantai.dev"
+        msg: |
+          Longhorn is installed!
+          
+          Data Path: {{ longhorn_data_path }}
+          UI: http://longhorn.tantai.dev (add to /etc/hosts)
+          
+          Pods status:
+          {{ longhorn_pods.stdout }}

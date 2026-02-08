@@ -1,0 +1,117 @@
+---
+# Playbook: Install Traefik Ingress Controller on K3s
+# - Install Traefik CRDs
+# - Install Traefik with LoadBalancer (VIP)
+# - Expose port 80/443 for Ingress
+
+- name: Install Traefik Ingress Controller
+  hosts: k3s_servers[0]
+  become: true
+  vars_files:
+    - ../group_vars/all/common.yml
+    - ../group_vars/k3s_servers.yml
+
+  vars:
+    traefik_version: "v2.10"
+    traefik_namespace: "traefik-system"
+    traefik_vip: "{{ service_ips.k3s_vip }}"
+
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+  tasks:
+    # ===== Install Traefik CRDs =====
+    - name: Check if Traefik CRDs exist
+      shell: kubectl get crd ingressroutes.traefik.io
+      register: traefik_crds
+      failed_when: false
+      changed_when: false
+
+    - name: Install Traefik CRDs
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ traefik_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+      when: traefik_crds.rc != 0
+
+    - name: Install Traefik RBAC
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ traefik_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+      when: traefik_crds.rc != 0
+
+    # ===== Create Namespace =====
+    - name: Create Traefik namespace
+      shell: kubectl create namespace {{ traefik_namespace }}
+      register: traefik_ns
+      failed_when: false
+      changed_when: traefik_ns.rc == 0
+
+    # ===== Install Traefik via Helm =====
+    - name: Add Traefik Helm repo
+      command: helm repo add traefik https://traefik.github.io/charts --force-update
+      changed_when: false
+
+    - name: Update Helm repos
+      command: helm repo update
+      changed_when: false
+
+    - name: Check if Traefik is installed
+      command: helm status traefik -n {{ traefik_namespace }}
+      register: traefik_status
+      failed_when: false
+      changed_when: false
+
+    - name: Install Traefik
+      shell: |
+        helm install traefik traefik/traefik \
+          --namespace {{ traefik_namespace }} \
+          --set service.type=NodePort \
+          --set ports.web.port=80 \
+          --set ports.web.nodePort=30180 \
+          --set ports.web.hostPort=80 \
+          --set ports.websecure.port=443 \
+          --set ports.websecure.nodePort=30543 \
+          --set ports.websecure.hostPort=443 \
+          --set ingressClass.enabled=true \
+          --set ingressClass.isDefaultClass=true \
+          --set logs.general.level=INFO \
+          --set logs.access.enabled=true \
+          --set deployment.kind=DaemonSet
+      when: traefik_status.rc != 0
+
+    - name: Wait for Traefik deployment
+      shell: kubectl wait --for=condition=Available deployment/traefik -n {{ traefik_namespace }} --timeout=180s
+      when: traefik_status.rc != 0
+
+    # ===== Get Status =====
+    - name: Get Traefik service
+      shell: kubectl get svc -n {{ traefik_namespace }}
+      register: traefik_svc
+      changed_when: false
+
+    - name: Get Traefik pods
+      shell: kubectl get pods -n {{ traefik_namespace }}
+      register: traefik_pods
+      changed_when: false
+
+    # ===== Display Info =====
+    - name: Show Traefik info
+      debug:
+        msg: |
+          Traefik Ingress Controller installed!
+
+          Access via VIP: {{ traefik_vip }}
+          HTTP Port: 80 (hostPort on all nodes)
+          HTTPS Port: 443 (hostPort on all nodes)
+
+          Service:
+          {{ traefik_svc.stdout }}
+
+          Pods:
+          {{ traefik_pods.stdout }}
+
+          Configure DNS on Cloudflare:
+          *.tantai.dev → {{ traefik_vip }}
+          rancher.tantai.dev → {{ traefik_vip }}
+          longhorn.tantai.dev → {{ traefik_vip }}
+
+          Test (after DNS config):
+          curl -k https://rancher.tantai.dev
