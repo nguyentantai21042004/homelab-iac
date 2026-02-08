@@ -1,0 +1,37 @@
+---
+# Zookeeper Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: NAMESPACE_NAME
+  labels:
+    app: zookeeper
+spec:
+  clusterIP: None
+  ports:
+    - port: 2181
+      name: client
+    - port: 2888
+      name: follower
+    - port: 3888
+      name: election
+  selector:
+    app: zookeeper
+---
+# Zookeeper Client Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-client
+  namespace: NAMESPACE_NAME
+  labels:
+    app: zookeeper
+spec:
+  type: ClusterIP
+  ports:
+    - port: 2181
+      targetPort: 2181
+      name: client
+  selector:
+    app: zookeeper

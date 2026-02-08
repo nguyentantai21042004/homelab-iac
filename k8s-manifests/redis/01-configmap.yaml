@@ -1,0 +1,64 @@
+---
+# Redis Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: NAMESPACE_NAME
+data:
+  redis.conf: |
+    # Network
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    
+    # General
+    daemonize no
+    pidfile /var/run/redis.pid
+    loglevel notice
+    
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    
+    # Replication
+    replica-serve-stale-data yes
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+    replica-priority 100
+    
+    # Memory
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    
+    # Append Only File
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+---
+# Sentinel Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-config
+  namespace: NAMESPACE_NAME
+data:
+  sentinel.conf: |
+    bind 0.0.0.0
+    port 26379
+    
+    sentinel monitor mymaster redis-0.redis.NAMESPACE_NAME.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 10000

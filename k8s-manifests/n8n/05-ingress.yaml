@@ -1,0 +1,20 @@
+---
+# Traefik IngressRoute - Expose n8n to internet with HTTPS
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: n8n-ingress
+  namespace: NAMESPACE_NAME
+  labels:
+    app: n8n
+spec:
+  entryPoints:
+    - websecure  # Port 443
+  routes:
+    - match: Host(`n8n.yourdomain.com`)  # <--- CHANGE: Your domain
+      kind: Rule
+      services:
+        - name: n8n
+          port: 5678
+  tls:
+    certResolver: myresolver  # <--- CHANGE: Your cert resolver name (le, letsencrypt, etc.)

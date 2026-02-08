@@ -1,0 +1,18 @@
+---
+# Persistent Volume Claim for n8n data
+# Uses Longhorn for high availability
+# Stores: binary files, uploads, custom nodes, etc.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-pvc
+  namespace: NAMESPACE_NAME
+  labels:
+    app: n8n
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi

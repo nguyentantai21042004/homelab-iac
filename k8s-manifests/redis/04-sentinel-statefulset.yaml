@@ -1,0 +1,89 @@
+---
+# Redis Sentinel StatefulSet (3 replicas for HA)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis-sentinel
+spec:
+  serviceName: redis-sentinel
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - redis-sentinel
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: init-sentinel
+          image: redis:7.2-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -ex
+              cp /mnt/config/sentinel.conf /etc/redis/sentinel.conf
+          volumeMounts:
+            - name: config
+              mountPath: /mnt/config
+            - name: sentinel-config
+              mountPath: /etc/redis
+      containers:
+        - name: sentinel
+          image: redis:7.2-alpine
+          command:
+            - redis-sentinel
+            - /etc/redis/sentinel.conf
+          ports:
+            - containerPort: 26379
+              name: sentinel
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - "26379"
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - "26379"
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: sentinel-config
+        - name: sentinel-config
+          emptyDir: {}

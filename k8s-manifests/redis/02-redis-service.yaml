@@ -1,0 +1,51 @@
+---
+# Redis Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: redis
+---
+# Redis Client Service (for applications)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-client
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: redis
+---
+# Sentinel Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis-sentinel
+spec:
+  type: ClusterIP
+  ports:
+    - port: 26379
+      targetPort: 26379
+      name: sentinel
+  selector:
+    app: redis-sentinel

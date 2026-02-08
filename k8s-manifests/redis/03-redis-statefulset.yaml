@@ -1,0 +1,102 @@
+---
+# Redis StatefulSet (3 replicas: 1 master + 2 replicas)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: NAMESPACE_NAME
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - redis
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: init-redis
+          image: redis:7.2-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -ex
+              # Copy config
+              cp /mnt/config/redis.conf /etc/redis/redis.conf
+              
+              # Set replica config if not redis-0
+              if [ "$(hostname)" != "redis-0" ]; then
+                echo "replicaof redis-0.redis.NAMESPACE_NAME.svc.cluster.local 6379" >> /etc/redis/redis.conf
+              fi
+          volumeMounts:
+            - name: config
+              mountPath: /mnt/config
+            - name: redis-config
+              mountPath: /etc/redis
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+              name: redis
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+        - name: redis-config
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi
