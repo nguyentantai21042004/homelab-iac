@@ -1,14 +1,13 @@
 ---
-# n8n Service - Internal cluster access
 apiVersion: v1
 kind: Service
 metadata:
   name: n8n
-  namespace: NAMESPACE_NAME
+  namespace: automation
   labels:
     app: n8n
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
     - port: 5678
       targetPort: 5678

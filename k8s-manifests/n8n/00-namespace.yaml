@@ -1,9 +1,8 @@
 ---
-# Namespace template - Replace NAMESPACE_NAME when deploying
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: NAMESPACE_NAME
+  name: automation
   labels:
     app.kubernetes.io/name: n8n
     app.kubernetes.io/component: workflow-automation

@@ -1,11 +1,9 @@
 ---
-# n8n Deployment
-# Single replica mode (default) - For queue mode with multiple replicas, add Redis
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: n8n
-  namespace: NAMESPACE_NAME
+  namespace: automation
   labels:
     app: n8n
 spec:
@@ -14,12 +12,14 @@ spec:
     matchLabels:
       app: n8n
   strategy:
-    type: Recreate  # Important: Prevents database lock issues during updates
+    type: Recreate
   template:
     metadata:
       labels:
         app: n8n
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: n8n
           image: n8nio/n8n:latest
@@ -28,49 +28,38 @@ spec:
             - containerPort: 5678
               name: http
           env:
-            # --- General Configuration ---
-            - name: N8N_HOST
-              value: "n8n.yourdomain.com"  # <--- CHANGE: Your domain
             - name: N8N_PORT
               value: "5678"
             - name: N8N_PROTOCOL
-              value: "https"
+              value: "http"
             - name: NODE_ENV
               value: "production"
-            - name: WEBHOOK_URL
-              value: "https://n8n.yourdomain.com/"  # <--- CHANGE: Your webhook URL
             - name: GENERIC_TIMEZONE
               value: "Asia/Ho_Chi_Minh"
+            - name: N8N_SECURE_COOKIE
+              value: "false"
             
-            # --- External Postgres Configuration ---
             - name: DB_TYPE
               value: "postgresdb"
             - name: DB_POSTGRESDB_HOST
-              value: "192.168.1.100"  # <--- CHANGE: Your Postgres VM IP
+              value: "172.16.19.10"
             - name: DB_POSTGRESDB_PORT
               value: "5432"
             - name: DB_POSTGRESDB_DATABASE
               value: "n8n_db"
             - name: DB_POSTGRESDB_USER
-              value: "n8n_user"
+              value: "n8n_db_master"
             - name: DB_POSTGRESDB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: n8n-secret
                   key: DB_PASSWORD
             
-            # --- Security ---
             - name: N8N_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
                   name: n8n-secret
                   key: N8N_ENCRYPTION_KEY
-            
-            # --- Optional: Performance Tuning ---
-            # - name: EXECUTIONS_DATA_PRUNE
-            #   value: "true"
-            # - name: EXECUTIONS_DATA_MAX_AGE
-            #   value: "168"  # Keep execution data for 7 days
           
           volumeMounts:
             - name: data
@@ -84,7 +73,6 @@ spec:
               cpu: 1000m
               memory: 1Gi
           
-          # Health checks
           livenessProbe:
             httpGet:
               path: /healthz

@@ -31,7 +31,6 @@
           -- ============================================================
           -- Auto-generated Database Setup Script
           -- Database: {{ db_name }}
-          -- Generated: {{ ansible_date_time.iso8601 }}
           -- ============================================================
 
           -- Create database
