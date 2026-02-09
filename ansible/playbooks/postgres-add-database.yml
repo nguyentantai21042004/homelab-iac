@@ -13,10 +13,12 @@
   vars:
     db_name: "{{ db_name }}"
     # Passwords - override these with -e or vault
-    master_pwd: "{{ db_name }}_master_pwd_change_me"
-    dev_pwd: "{{ db_name }}_dev_pwd_change_me"
-    prod_pwd: "{{ db_name }}_prod_pwd_change_me"
-    readonly_pwd: "{{ db_name }}_readonly_pwd_change_me"
+    # Default: simple passwords matching username (for dev/testing)
+    # Production: use -e to override or store in vault
+    master_pwd: "{{ db_name }}_master"
+    dev_pwd: "{{ db_name }}_dev"
+    prod_pwd: "{{ db_name }}_prod"
+    readonly_pwd: "{{ db_name }}_readonly"
 
   tasks:
     - name: Validate db_name is provided

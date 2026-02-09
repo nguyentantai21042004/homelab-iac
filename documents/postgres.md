@@ -45,7 +45,7 @@ ansible-playbook playbooks/setup-vm.yml -l postgres
 ansible-playbook playbooks/setup-postgres.yml
 ```
 
-**Kết quả:** PostgreSQL đã chạy trên `172.16.19.10:5432` với 2 databases mẫu (kanban, smap_identity)
+**Kết quả:** PostgreSQL đã chạy trên `172.16.19.10:5432` (không có sample databases)
 
 ---
 
