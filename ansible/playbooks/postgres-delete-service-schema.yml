@@ -1,0 +1,120 @@
+---
+# Playbook: Delete service schema and its users
+# Usage: ansible-playbook playbooks/postgres-delete-service-schema.yml -e "service_name=auth db_name=smap"
+# 
+# WARNING: This will DELETE all data in the schema!
+
+- name: Delete service schema from PostgreSQL
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+
+  vars:
+    service_name: "{{ service_name }}"
+    db_name: "{{ db_name | default('smap') }}"
+    confirm_delete: "{{ confirm_delete | default('no') }}"
+
+  tasks:
+    - name: Validate required parameters
+      fail:
+        msg: "service_name is required. Usage: -e 'service_name=auth db_name=smap confirm_delete=yes'"
+      when: service_name is not defined or service_name == ""
+
+    - name: Safety check - require confirmation
+      fail:
+        msg: |
+          ⚠️  SAFETY CHECK FAILED!
+          
+          You are about to DELETE schema_{{ service_name }} and all its data!
+          
+          To proceed, add: -e "confirm_delete=yes"
+          
+          Example:
+            ansible-playbook playbooks/postgres-delete-service-schema.yml \
+              -e "service_name={{ service_name }} db_name={{ db_name }} confirm_delete=yes"
+      when: confirm_delete != 'yes'
+
+    - name: Create deletion SQL script
+      copy:
+        dest: /tmp/delete-schema-{{ service_name }}.sql
+        content: |
+          -- ============================================================
+          -- Delete Service Schema and Users
+          -- Service: {{ service_name }}
+          -- Database: {{ db_name }}
+          -- ============================================================
+
+          \c {{ db_name }}
+
+          -- ============================================================
+          -- 1. TERMINATE active connections from these users
+          -- ============================================================
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE usename IN ('{{ service_name }}_master', '{{ service_name }}_prod', '{{ service_name }}_readonly')
+            AND pid <> pg_backend_pid();
+
+          -- ============================================================
+          -- 2. DROP SCHEMA (CASCADE will drop all tables, sequences, etc.)
+          -- ============================================================
+          DROP SCHEMA IF EXISTS schema_{{ service_name }} CASCADE;
+
+          -- ============================================================
+          -- 3. REVOKE database privileges before dropping users
+          -- ============================================================
+          REVOKE ALL PRIVILEGES ON DATABASE {{ db_name }} FROM {{ service_name }}_master;
+          REVOKE ALL PRIVILEGES ON DATABASE {{ db_name }} FROM {{ service_name }}_prod;
+          REVOKE ALL PRIVILEGES ON DATABASE {{ db_name }} FROM {{ service_name }}_readonly;
+
+          -- ============================================================
+          -- 4. DROP USERS
+          -- ============================================================
+          DROP USER IF EXISTS {{ service_name }}_master;
+          DROP USER IF EXISTS {{ service_name }}_prod;
+          DROP USER IF EXISTS {{ service_name }}_readonly;
+
+          -- ============================================================
+          -- 5. VERIFICATION
+          -- ============================================================
+          SELECT 
+            CASE 
+              WHEN NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'schema_{{ service_name }}')
+              THEN '✅ Schema deleted'
+              ELSE '❌ Schema still exists'
+            END as schema_status,
+            CASE 
+              WHEN NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname LIKE '{{ service_name }}%')
+              THEN '✅ Users deleted'
+              ELSE '❌ Some users still exist'
+            END as users_status;
+        mode: "0644"
+
+    - name: Execute deletion script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/delete-schema-{{ service_name }}.sql
+      register: sql_result
+
+    - name: Show SQL output
+      debug:
+        var: sql_result.stdout_lines
+
+    - name: Cleanup SQL script
+      file:
+        path: /tmp/delete-schema-{{ service_name }}.sql
+        state: absent
+
+    - name: Show result
+      debug:
+        msg: |
+          ✅ Service schema '{{ service_name }}' has been DELETED!
+
+          🗑️  Deleted:
+            - Schema: schema_{{ service_name }} (and all tables/data)
+            - Users: {{ service_name }}_master, {{ service_name }}_prod, {{ service_name }}_readonly
+
+          ⚠️  This action is IRREVERSIBLE!
+          
+          📝 To recreate:
+            ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name={{ service_name }}"

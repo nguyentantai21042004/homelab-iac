@@ -1,0 +1,179 @@
+---
+# Playbook: Add new service schema with isolated user
+# Usage: ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=auth db_name=smap"
+# 
+# This creates:
+# - Schema: schema_<service_name>
+# - Users: <service_name>_master, <service_name>_prod, <service_name>_readonly
+# - Full isolation: user A cannot see schema B
+
+- name: Add new service schema to PostgreSQL
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+    - ../group_vars/all/vault.yml
+
+  vars:
+    service_name: "{{ service_name }}"
+    db_name: "{{ db_name | default('smap') }}"
+    # Passwords - override with -e or vault
+    master_pwd: "{{ service_name }}_master_pwd"
+    prod_pwd: "{{ service_name }}_prod_pwd"
+    readonly_pwd: "{{ service_name }}_readonly_pwd"
+
+  tasks:
+    - name: Validate required parameters
+      fail:
+        msg: "service_name is required. Usage: -e 'service_name=auth db_name=smap'"
+      when: service_name is not defined or service_name == ""
+
+    - name: Create SQL script for service schema
+      copy:
+        dest: /tmp/add-schema-{{ service_name }}.sql
+        content: |
+          -- ============================================================
+          -- Service Schema Setup with Full Isolation
+          -- Service: {{ service_name }}
+          -- Database: {{ db_name }}
+          -- ============================================================
+
+          \c {{ db_name }}
+
+          -- ============================================================
+          -- 1. CREATE SCHEMA
+          -- ============================================================
+          CREATE SCHEMA IF NOT EXISTS schema_{{ service_name }};
+
+          -- ============================================================
+          -- 2. CREATE USERS
+          -- ============================================================
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ service_name }}_master') THEN
+              CREATE USER {{ service_name }}_master WITH PASSWORD '{{ master_pwd }}';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ service_name }}_prod') THEN
+              CREATE USER {{ service_name }}_prod WITH PASSWORD '{{ prod_pwd }}';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ service_name }}_readonly') THEN
+              CREATE USER {{ service_name }}_readonly WITH PASSWORD '{{ readonly_pwd }}';
+            END IF;
+          END
+          $$;
+
+          -- ============================================================
+          -- 3. GRANT DATABASE CONNECTION (Required for login)
+          -- ============================================================
+          GRANT CONNECT ON DATABASE {{ db_name }} TO {{ service_name }}_master, {{ service_name }}_prod, {{ service_name }}_readonly;
+
+          -- ============================================================
+          -- 4. MASTER USER: Full control on its schema ONLY
+          -- ============================================================
+          GRANT ALL PRIVILEGES ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
+          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
+          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
+          GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
+          
+          -- Default privileges for future objects
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON TABLES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON SEQUENCES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON FUNCTIONS TO {{ service_name }}_master;
+
+          -- Set search_path: user will ONLY see their schema
+          ALTER ROLE {{ service_name }}_master SET search_path TO schema_{{ service_name }};
+
+          -- ============================================================
+          -- 5. PROD USER: CRUD only on its schema
+          -- ============================================================
+          GRANT USAGE ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
+          
+          -- Default privileges for future objects
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ service_name }}_prod;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT USAGE, SELECT ON SEQUENCES TO {{ service_name }}_prod;
+
+          -- Set search_path: user will ONLY see their schema
+          ALTER ROLE {{ service_name }}_prod SET search_path TO schema_{{ service_name }};
+
+          -- ============================================================
+          -- 6. READONLY USER: SELECT only on its schema
+          -- ============================================================
+          GRANT USAGE ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_readonly;
+          GRANT SELECT ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_readonly;
+          
+          -- Default privileges for future objects
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT SELECT ON TABLES TO {{ service_name }}_readonly;
+
+          -- Set search_path: user will ONLY see their schema
+          ALTER ROLE {{ service_name }}_readonly SET search_path TO schema_{{ service_name }};
+
+          -- ============================================================
+          -- 7. SECURITY: Revoke access to other schemas
+          -- ============================================================
+          -- Ensure these users CANNOT access public schema or other schemas
+          REVOKE ALL ON SCHEMA public FROM {{ service_name }}_master, {{ service_name }}_prod, {{ service_name }}_readonly;
+          REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {{ service_name }}_master, {{ service_name }}_prod, {{ service_name }}_readonly;
+
+          -- ============================================================
+          -- 8. VERIFICATION QUERY
+          -- ============================================================
+          SELECT 
+            '{{ service_name }}' as service,
+            'schema_{{ service_name }}' as schema_name,
+            usename as username,
+            has_schema_privilege(usename, 'schema_{{ service_name }}', 'USAGE') as can_use_schema,
+            has_schema_privilege(usename, 'schema_{{ service_name }}', 'CREATE') as can_create
+          FROM pg_user 
+          WHERE usename LIKE '{{ service_name }}%'
+          ORDER BY usename;
+        mode: "0644"
+
+    - name: Execute SQL script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/add-schema-{{ service_name }}.sql
+      register: sql_result
+
+    - name: Show SQL output
+      debug:
+        var: sql_result.stdout_lines
+
+    - name: Cleanup SQL script
+      file:
+        path: /tmp/add-schema-{{ service_name }}.sql
+        state: absent
+
+    - name: Show result
+      debug:
+        msg: |
+          ✅ Service schema '{{ service_name }}' created successfully with FULL ISOLATION!
+
+          📦 Schema: schema_{{ service_name }}
+          🗄️  Database: {{ db_name }}
+
+          👥 Users created:
+            - {{ service_name }}_master   (Full DDL + CRUD on schema_{{ service_name }})
+            - {{ service_name }}_prod     (CRUD only on schema_{{ service_name }})
+            - {{ service_name }}_readonly (SELECT only on schema_{{ service_name }})
+
+          🔒 Isolation Status:
+            ✅ Each user has search_path set to their schema ONLY
+            ✅ Users CANNOT see other schemas (public, schema_other_service)
+            ✅ Users CANNOT access tables in other schemas
+            ✅ Cross-schema access is BLOCKED
+
+          🔌 Connection strings:
+            Master:   postgresql://{{ service_name }}_master:{{ master_pwd }}@{{ ansible_host }}:5432/{{ db_name }}
+            Prod:     postgresql://{{ service_name }}_prod:{{ prod_pwd }}@{{ ansible_host }}:5432/{{ db_name }}
+            ReadOnly: postgresql://{{ service_name }}_readonly:{{ readonly_pwd }}@{{ ansible_host }}:5432/{{ db_name }}
+
+          🧪 Test isolation:
+            psql -U {{ service_name }}_prod -d {{ db_name }} -c "\dn"
+            Expected: Only see schema_{{ service_name }}
+
+          📝 Next steps:
+            - Connect using {{ service_name }}_prod user
+            - Create tables (they will be in schema_{{ service_name }} automatically)
+            - Other services cannot see your tables!

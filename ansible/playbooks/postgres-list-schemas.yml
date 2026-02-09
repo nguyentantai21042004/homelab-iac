@@ -1,0 +1,76 @@
+---
+# Playbook: List all service schemas and their users
+# Usage: ansible-playbook playbooks/postgres-list-schemas.yml -e "db_name=smap"
+
+- name: List all service schemas
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+
+  vars:
+    db_name: "{{ db_name | default('smap') }}"
+
+  tasks:
+    - name: Create query script
+      copy:
+        dest: /tmp/list-schemas.sql
+        content: |
+          \c {{ db_name }}
+
+          -- ============================================================
+          -- List all schemas (excluding system schemas)
+          -- ============================================================
+          SELECT 
+            schema_name,
+            schema_owner,
+            (SELECT count(*) FROM information_schema.tables WHERE table_schema = schema_name) as table_count
+          FROM information_schema.schemata
+          WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+          ORDER BY schema_name;
+
+          -- ============================================================
+          -- List all users and their schemas
+          -- ============================================================
+          SELECT 
+            r.rolname as username,
+            ARRAY_AGG(DISTINCT n.nspname ORDER BY n.nspname) as accessible_schemas,
+            r.rolcanlogin as can_login
+          FROM pg_roles r
+          LEFT JOIN pg_namespace n ON has_schema_privilege(r.oid, n.oid, 'USAGE')
+          WHERE r.rolname NOT LIKE 'pg_%'
+            AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+          GROUP BY r.rolname, r.rolcanlogin
+          ORDER BY r.rolname;
+
+          -- ============================================================
+          -- Show search_path for each user
+          -- ============================================================
+          SELECT 
+            rolname as username,
+            COALESCE(
+              (SELECT setting FROM pg_db_role_setting WHERE setrole = r.oid AND setdatabase = d.oid AND setconfig[1] LIKE 'search_path=%'),
+              'default ($user, public)'
+            ) as search_path
+          FROM pg_roles r
+          CROSS JOIN pg_database d
+          WHERE d.datname = '{{ db_name }}'
+            AND r.rolname NOT LIKE 'pg_%'
+            AND r.rolcanlogin = true
+          ORDER BY r.rolname;
+        mode: "0644"
+
+    - name: Execute query
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/list-schemas.sql
+      register: query_result
+
+    - name: Show results
+      debug:
+        var: query_result.stdout_lines
+
+    - name: Cleanup
+      file:
+        path: /tmp/list-schemas.sql
+        state: absent

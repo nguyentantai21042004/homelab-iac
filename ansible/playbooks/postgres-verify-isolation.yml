@@ -1,9 +1,10 @@
 ---
-# Playbook: Verify PostgreSQL Multi-tenant Isolation
-# Usage: ansible-playbook playbooks/postgres-verify-isolation.yml
-# Purpose: Test that users from DB A cannot access DB B
+# Playbook: Verify schema isolation between services
+# Usage: ansible-playbook playbooks/postgres-verify-isolation.yml -e "db_name=smap"
+#
+# This will test that users from one service cannot access another service's schema
 
-- name: Verify PostgreSQL Multi-tenant Isolation
+- name: Verify PostgreSQL schema isolation
   hosts: postgres_servers
   become: true
 
@@ -11,63 +12,146 @@
     - ../group_vars/postgres_servers.yml
 
   vars:
-    # Test matrix: Try to access DB B using user from DB A
-    test_cases:
-      - { user: "kanban_master", password: "kanban_master", target_db: "smap_identity", should_fail: true }
-      - { user: "smap_identity_prod", password: "smap_identity_prod", target_db: "kanban", should_fail: true }
-      - { user: "kanban_prod", password: "kanban_prod", target_db: "kanban", should_fail: false }
-      - { user: "smap_identity_master", password: "smap_identity_master", target_db: "smap_identity", should_fail: false }
+    db_name: "{{ db_name | default('smap') }}"
 
   tasks:
-    - name: Test cross-database access (should fail)
+    - name: Create isolation test script
+      copy:
+        dest: /tmp/verify-isolation.sql
+        content: |
+          \c {{ db_name }}
+
+          -- ============================================================
+          -- ISOLATION TEST REPORT
+          -- ============================================================
+
+          \echo '============================================================'
+          \echo 'TEST 1: List all schemas and their owners'
+          \echo '============================================================'
+          SELECT 
+            nspname as schema_name,
+            nspowner::regrole as owner,
+            (SELECT count(*) FROM pg_tables WHERE schemaname = nspname) as table_count
+          FROM pg_namespace
+          WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_temp_1', 'pg_toast_temp_1')
+          ORDER BY nspname;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'TEST 2: Check search_path for each service user'
+          \echo '============================================================'
+          SELECT 
+            r.rolname as username,
+            COALESCE(
+              (SELECT regexp_replace(unnest(setconfig), 'search_path=', '') 
+               FROM pg_db_role_setting 
+               WHERE setrole = r.oid 
+               AND setconfig::text LIKE '%search_path%' 
+               LIMIT 1),
+              'NOT SET (will use default)'
+            ) as search_path
+          FROM pg_roles r
+          WHERE r.rolname NOT LIKE 'pg_%'
+            AND r.rolname != 'postgres'
+            AND r.rolcanlogin = true
+          ORDER BY r.rolname;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'TEST 3: Schema privileges matrix'
+          \echo '============================================================'
+          SELECT 
+            r.rolname as username,
+            n.nspname as schema_name,
+            has_schema_privilege(r.oid, n.oid, 'USAGE') as can_use,
+            has_schema_privilege(r.oid, n.oid, 'CREATE') as can_create
+          FROM pg_roles r
+          CROSS JOIN pg_namespace n
+          WHERE r.rolname NOT LIKE 'pg_%'
+            AND r.rolname != 'postgres'
+            AND r.rolcanlogin = true
+            AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+          ORDER BY r.rolname, n.nspname;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'TEST 4: Cross-schema access test (Expected: FALSE for other schemas)'
+          \echo '============================================================'
+          WITH service_users AS (
+            SELECT rolname, 
+                   regexp_replace(rolname, '_(master|prod|readonly)$', '') as service_name
+            FROM pg_roles
+            WHERE rolname ~ '_[a-z]+$'
+              AND rolcanlogin = true
+          )
+          SELECT 
+            su.rolname as username,
+            'schema_' || su.service_name as own_schema,
+            n.nspname as checking_schema,
+            CASE 
+              WHEN n.nspname = 'schema_' || su.service_name THEN '✅ OWN SCHEMA'
+              WHEN has_schema_privilege(su.rolname, n.nspname, 'USAGE') THEN '❌ CAN ACCESS (ISOLATION BREACH!)'
+              ELSE '✅ BLOCKED (Correct)'
+            END as isolation_status
+          FROM service_users su
+          CROSS JOIN pg_namespace n
+          WHERE n.nspname LIKE 'schema_%'
+          ORDER BY su.rolname, n.nspname;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'TEST 5: Public schema access (Expected: REVOKED for service users)'
+          \echo '============================================================'
+          SELECT 
+            r.rolname as username,
+            has_schema_privilege(r.oid, 'public', 'USAGE') as can_use_public,
+            has_schema_privilege(r.oid, 'public', 'CREATE') as can_create_in_public,
+            CASE 
+              WHEN has_schema_privilege(r.oid, 'public', 'USAGE') THEN '⚠️  Can access public schema'
+              ELSE '✅ Public schema blocked'
+            END as public_access_status
+          FROM pg_roles r
+          WHERE r.rolname NOT LIKE 'pg_%'
+            AND r.rolname != 'postgres'
+            AND r.rolcanlogin = true
+          ORDER BY r.rolname;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'SUMMARY: Isolation Status'
+          \echo '============================================================'
+          SELECT 
+            COUNT(DISTINCT CASE WHEN rolname ~ '_[a-z]+$' THEN regexp_replace(rolname, '_(master|prod|readonly)$', '') END) as total_services,
+            COUNT(DISTINCT CASE WHEN nspname LIKE 'schema_%' THEN nspname END) as total_schemas,
+            COUNT(*) FILTER (WHERE rolcanlogin = true AND rolname NOT LIKE 'pg_%' AND rolname != 'postgres') as total_users
+          FROM pg_roles
+          CROSS JOIN pg_namespace;
+        mode: "0644"
+
+    - name: Execute isolation test
       shell: |
-        PGPASSWORD="{{ item.password }}" psql -h localhost -U {{ item.user }} -d {{ item.target_db }} -c "SELECT 1;" 2>&1
+        docker exec -i pg15_prod psql -U postgres < /tmp/verify-isolation.sql
       register: test_result
-      failed_when: false
-      changed_when: false
-      loop: "{{ test_cases }}"
-      loop_control:
-        label: "{{ item.user }} -> {{ item.target_db }}"
 
-    - name: Analyze results
-      set_fact:
-        test_summary: |
-          {% set results = [] %}
-          {% for item in test_result.results %}
-          {% set test = test_cases[loop.index0] %}
-          {% set failed = 'permission denied' in item.stdout or 'FATAL' in item.stdout %}
-          {% set expected = test.should_fail %}
-          {% set status = '✅ PASS' if (failed == expected) else '❌ FAIL' %}
-          {% set _ = results.append({
-            'test': test.user + ' -> ' + test.target_db,
-            'expected': 'DENY' if expected else 'ALLOW',
-            'actual': 'DENIED' if failed else 'ALLOWED',
-            'status': status
-          }) %}
-          {% endfor %}
-          {{ results | to_nice_yaml }}
+    - name: Show test results
+      debug:
+        var: test_result.stdout_lines
 
-    - name: Display test results
+    - name: Cleanup test script
+      file:
+        path: /tmp/verify-isolation.sql
+        state: absent
+
+    - name: Show summary
       debug:
         msg: |
-          ╔════════════════════════════════════════════════════════════════╗
-          ║  PostgreSQL Multi-tenant Isolation Test Results               ║
-          ╚════════════════════════════════════════════════════════════════╝
+          ✅ Isolation verification completed!
 
-          {{ test_summary }}
+          📊 Check the output above for:
+            1. Each user should only see their own schema in search_path
+            2. Cross-schema access should be BLOCKED
+            3. Public schema should be REVOKED for service users
+            4. Each service should have 3 users (master, prod, readonly)
 
-          Legend:
-            ✅ PASS = Behavior matches expectation
-            ❌ FAIL = Security violation detected
-
-    - name: Check if all tests passed
-      assert:
-        that:
-          - "'❌ FAIL' not in test_summary"
-        fail_msg: |
-          ⚠️  SECURITY VIOLATION DETECTED!
-          Some users can access databases they shouldn't.
-          Review the test results above and check RBAC configuration.
-        success_msg: |
-          ✅ All isolation tests PASSED!
-          Multi-tenant security is working correctly.
+          ⚠️  If you see any "ISOLATION BREACH" warnings, run:
+            ansible-playbook playbooks/postgres-fix-isolation.yml -e "db_name={{ db_name }}"

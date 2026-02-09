@@ -73,3 +73,34 @@ output: ## Output terraform on Admin VM
 init: ## Initialize terraform on Admin VM  
 	@echo "$(BLUE)Initializing terraform on Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform init"
+
+# ===== POSTGRES SCHEMA MANAGEMENT =====
+pg-init-db: ## Initialize new isolated database (Usage: make pg-init-db DB=smap)
+	@echo "$(BLUE)Initializing database $(DB) with schema isolation...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-init-isolated-db.yml -e "db_name=$(DB)"
+
+pg-add-schema: ## Add new service schema (Usage: make pg-add-schema SERVICE=auth DB=smap)
+	@echo "$(BLUE)Adding schema for service $(SERVICE)...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=$(SERVICE) db_name=$(DB)"
+
+pg-list: ## List all schemas and users (Usage: make pg-list DB=smap)
+	@echo "$(BLUE)Listing schemas in database $(DB)...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-list-schemas.yml -e "db_name=$(DB)"
+
+pg-verify: ## Verify schema isolation (Usage: make pg-verify DB=smap)
+	@echo "$(BLUE)Verifying isolation in database $(DB)...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-verify-isolation.yml -e "db_name=$(DB)"
+
+pg-delete-schema: ## Delete service schema (Usage: make pg-delete-schema SERVICE=auth DB=smap)
+	@echo "$(BLUE)⚠️  WARNING: This will DELETE all data in schema_$(SERVICE)!$(NC)"
+	@echo "$(BLUE)Press Ctrl+C to cancel, or Enter to continue...$(NC)"
+	@read confirm
+	cd ansible && ansible-playbook playbooks/postgres-delete-service-schema.yml -e "service_name=$(SERVICE) db_name=$(DB) confirm_delete=yes"
+
+pg-update-password: ## Update service user password (Usage: make pg-update-password SERVICE=auth USER=prod PASS=newpass)
+	@echo "$(BLUE)Updating password for $(SERVICE)_$(USER)...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-update-service-password.yml -e "service_name=$(SERVICE) user_type=$(USER) new_password=$(PASS)"
+
+pg-fix-isolation: ## Fix isolation for existing database (Usage: make pg-fix-isolation DB=smap)
+	@echo "$(BLUE)Fixing isolation in database $(DB)...$(NC)"
+	cd ansible && ansible-playbook playbooks/postgres-fix-isolation.yml -e "db_name=$(DB)"

@@ -1,0 +1,59 @@
+---
+# Playbook: Fix isolation for existing database
+# Usage: ansible-playbook playbooks/postgres-fix-isolation.yml -e "db_name=smap"
+# 
+# This will:
+# - Revoke PUBLIC access from public schema
+# - Ensure service users can only see their own schemas
+
+- name: Fix PostgreSQL schema isolation
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+
+  vars:
+    db_name: "{{ db_name | default('smap') }}"
+
+  tasks:
+    - name: Create fix isolation script
+      copy:
+        dest: /tmp/fix-isolation.sql
+        content: |
+          \c {{ db_name }}
+          
+          -- Revoke PUBLIC access from public schema
+          REVOKE ALL ON SCHEMA public FROM PUBLIC;
+          REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+          
+          -- Fix search_path for all service users
+          DO $$
+          DECLARE
+            user_record RECORD;
+            service_name TEXT;
+          BEGIN
+            FOR user_record IN 
+              SELECT rolname FROM pg_roles 
+              WHERE rolname ~ '_[a-z]+$' AND rolcanlogin = true
+            LOOP
+              service_name := regexp_replace(user_record.rolname, '_(master|prod|readonly)$', '');
+              EXECUTE format('ALTER ROLE %I SET search_path TO schema_%I', user_record.rolname, service_name);
+              RAISE NOTICE 'Fixed search_path for %', user_record.rolname;
+            END LOOP;
+          END $$;
+        mode: "0644"
+
+    - name: Execute fix script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/fix-isolation.sql
+      register: sql_result
+
+    - name: Show output
+      debug:
+        var: sql_result.stdout_lines
+
+    - name: Cleanup
+      file:
+        path: /tmp/fix-isolation.sql
+        state: absent

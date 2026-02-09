@@ -1,0 +1,115 @@
+---
+# Playbook: Initialize new database with schema isolation
+# Usage: ansible-playbook playbooks/postgres-init-isolated-db.yml -e "db_name=smap"
+#
+# This creates a new database with proper isolation setup
+
+- name: Initialize isolated PostgreSQL database
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+    - ../group_vars/all/vault.yml
+
+  vars:
+    db_name: "{{ db_name | default('smap') }}"
+
+  tasks:
+    - name: Validate db_name
+      fail:
+        msg: "db_name is required. Usage: -e 'db_name=smap'"
+      when: db_name is not defined or db_name == ""
+
+    - name: Create database initialization script
+      copy:
+        dest: /tmp/init-{{ db_name }}.sql
+        content: |
+          -- ============================================================
+          -- Initialize Database with Schema Isolation
+          -- Database: {{ db_name }}
+          -- ============================================================
+
+          -- Create database if not exists
+          SELECT 'CREATE DATABASE {{ db_name }}'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ db_name }}')
+          \gexec
+
+          -- Connect to database
+          \c {{ db_name }}
+
+          -- ============================================================
+          -- CRITICAL: Revoke PUBLIC access (Foundation for isolation)
+          -- ============================================================
+          REVOKE ALL ON SCHEMA public FROM PUBLIC;
+          REVOKE ALL ON DATABASE {{ db_name }} FROM PUBLIC;
+          REVOKE CONNECT ON DATABASE {{ db_name }} FROM PUBLIC;
+
+          -- ============================================================
+          -- Grant postgres superuser full access
+          -- ============================================================
+          GRANT ALL PRIVILEGES ON DATABASE {{ db_name }} TO postgres;
+          GRANT ALL PRIVILEGES ON SCHEMA public TO postgres;
+
+          -- ============================================================
+          -- Create extension if needed
+          -- ============================================================
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+          -- ============================================================
+          -- Verification
+          -- ============================================================
+          SELECT 
+            '{{ db_name }}' as database_name,
+            '✅ Database initialized with schema isolation' as status,
+            '🔒 PUBLIC access revoked' as security_status,
+            'Ready to add service schemas' as next_step;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'Database {{ db_name }} initialized successfully!'
+          \echo '============================================================'
+          \echo ''
+          \echo 'Next steps:'
+          \echo '  1. Add service schemas:'
+          \echo '     ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=auth db_name={{ db_name }}"'
+          \echo ''
+          \echo '  2. Verify isolation:'
+          \echo '     ansible-playbook playbooks/postgres-verify-isolation.yml -e "db_name={{ db_name }}"'
+          \echo ''
+        mode: "0644"
+
+    - name: Execute initialization script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/init-{{ db_name }}.sql
+      register: sql_result
+
+    - name: Show SQL output
+      debug:
+        var: sql_result.stdout_lines
+
+    - name: Cleanup SQL script
+      file:
+        path: /tmp/init-{{ db_name }}.sql
+        state: absent
+
+    - name: Show result
+      debug:
+        msg: |
+          ✅ Database '{{ db_name }}' initialized with schema isolation!
+
+          🔒 Security features enabled:
+            - PUBLIC access REVOKED
+            - Ready for multi-tenant schema isolation
+            - Zero-trust security model
+
+          📝 Next steps:
+            1. Add service schemas:
+               ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=auth db_name={{ db_name }}"
+               ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=order db_name={{ db_name }}"
+
+            2. Verify isolation:
+               ansible-playbook playbooks/postgres-verify-isolation.yml -e "db_name={{ db_name }}"
+
+            3. List schemas:
+               ansible-playbook playbooks/postgres-list-schemas.yml -e "db_name={{ db_name }}"

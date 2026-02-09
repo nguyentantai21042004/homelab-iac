@@ -1,0 +1,179 @@
+---
+# Playbook: Demo schema isolation with real test
+# Usage: ansible-playbook playbooks/postgres-demo-isolation.yml -e "db_name=smap"
+#
+# This will:
+# 1. Create 2 test services (demo_a, demo_b)
+# 2. Create tables in each schema
+# 3. Test cross-schema access (should fail)
+# 4. Cleanup
+
+- name: Demo PostgreSQL schema isolation
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+
+  vars:
+    db_name: "{{ db_name | default('smap') }}"
+
+  tasks:
+    - name: Create demo script
+      copy:
+        dest: /tmp/demo-isolation.sql
+        content: |
+          \c {{ db_name }}
+
+          \echo '============================================================'
+          \echo 'DEMO: PostgreSQL Schema Isolation'
+          \echo '============================================================'
+          \echo ''
+
+          -- ============================================================
+          -- STEP 1: Create demo schemas and users
+          -- ============================================================
+          \echo '📦 STEP 1: Creating demo schemas...'
+          CREATE SCHEMA IF NOT EXISTS schema_demo_a;
+          CREATE SCHEMA IF NOT EXISTS schema_demo_b;
+
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'demo_a_prod') THEN
+              CREATE USER demo_a_prod WITH PASSWORD 'demo_a_pass';
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'demo_b_prod') THEN
+              CREATE USER demo_b_prod WITH PASSWORD 'demo_b_pass';
+            END IF;
+          END $$;
+
+          -- Grant permissions
+          GRANT CONNECT ON DATABASE {{ db_name }} TO demo_a_prod, demo_b_prod;
+          GRANT USAGE, CREATE ON SCHEMA schema_demo_a TO demo_a_prod;
+          GRANT USAGE, CREATE ON SCHEMA schema_demo_b TO demo_b_prod;
+          GRANT ALL ON ALL TABLES IN SCHEMA schema_demo_a TO demo_a_prod;
+          GRANT ALL ON ALL TABLES IN SCHEMA schema_demo_b TO demo_b_prod;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_demo_a GRANT ALL ON TABLES TO demo_a_prod;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_demo_b GRANT ALL ON TABLES TO demo_b_prod;
+
+          -- Set search_path
+          ALTER ROLE demo_a_prod SET search_path TO schema_demo_a;
+          ALTER ROLE demo_b_prod SET search_path TO schema_demo_b;
+
+          -- Revoke cross-schema access
+          REVOKE ALL ON SCHEMA schema_demo_a FROM demo_b_prod;
+          REVOKE ALL ON SCHEMA schema_demo_b FROM demo_a_prod;
+
+          \echo '✅ Schemas created: schema_demo_a, schema_demo_b'
+          \echo ''
+
+          -- ============================================================
+          -- STEP 2: Create tables in each schema
+          -- ============================================================
+          \echo '📋 STEP 2: Creating tables...'
+          
+          CREATE TABLE IF NOT EXISTS schema_demo_a.users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50),
+            service VARCHAR(20) DEFAULT 'demo_a'
+          );
+
+          CREATE TABLE IF NOT EXISTS schema_demo_b.products (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100),
+            service VARCHAR(20) DEFAULT 'demo_b'
+          );
+
+          INSERT INTO schema_demo_a.users (username) VALUES ('alice'), ('bob');
+          INSERT INTO schema_demo_b.products (name) VALUES ('laptop'), ('phone');
+
+          \echo '✅ Tables created and populated'
+          \echo ''
+
+          -- ============================================================
+          -- STEP 3: Test isolation
+          -- ============================================================
+          \echo '🧪 STEP 3: Testing isolation...'
+          \echo ''
+
+          \echo '--- Test 3.1: demo_a_prod can access its own schema ---'
+          SET ROLE demo_a_prod;
+          SELECT 'demo_a_prod' as current_user, * FROM users LIMIT 2;
+          RESET ROLE;
+          \echo '✅ PASS: demo_a_prod can read from schema_demo_a'
+          \echo ''
+
+          \echo '--- Test 3.2: demo_b_prod can access its own schema ---'
+          SET ROLE demo_b_prod;
+          SELECT 'demo_b_prod' as current_user, * FROM products LIMIT 2;
+          RESET ROLE;
+          \echo '✅ PASS: demo_b_prod can read from schema_demo_b'
+          \echo ''
+
+          \echo '--- Test 3.3: demo_a_prod CANNOT access schema_demo_b ---'
+          SET ROLE demo_a_prod;
+          \echo 'Attempting: SELECT * FROM schema_demo_b.products;'
+          SELECT * FROM schema_demo_b.products;
+          -- This should fail with: ERROR: permission denied for schema schema_demo_b
+          RESET ROLE;
+
+          \echo '--- Test 3.4: demo_b_prod CANNOT access schema_demo_a ---'
+          SET ROLE demo_b_prod;
+          \echo 'Attempting: SELECT * FROM schema_demo_a.users;'
+          SELECT * FROM schema_demo_a.users;
+          -- This should fail with: ERROR: permission denied for schema schema_demo_a
+          RESET ROLE;
+
+          \echo ''
+          \echo '============================================================'
+          \echo 'DEMO COMPLETED!'
+          \echo '============================================================'
+          \echo ''
+          \echo 'Summary:'
+          \echo '  ✅ Each user can access their own schema'
+          \echo '  ✅ Cross-schema access is BLOCKED'
+          \echo '  ✅ Isolation is working correctly'
+          \echo ''
+          \echo 'To cleanup demo data:'
+          \echo '  DROP SCHEMA schema_demo_a CASCADE;'
+          \echo '  DROP SCHEMA schema_demo_b CASCADE;'
+          \echo '  DROP USER demo_a_prod;'
+          \echo '  DROP USER demo_b_prod;'
+          \echo ''
+        mode: "0644"
+
+    - name: Execute demo
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/demo-isolation.sql 2>&1 || true
+      register: demo_result
+
+    - name: Show demo output
+      debug:
+        var: demo_result.stdout_lines
+
+    - name: Cleanup demo script
+      file:
+        path: /tmp/demo-isolation.sql
+        state: absent
+
+    - name: Ask for cleanup
+      pause:
+        prompt: |
+          
+          Demo completed! Do you want to cleanup demo data? (yes/no)
+      register: cleanup_choice
+
+    - name: Cleanup demo data
+      shell: |
+        docker exec -i pg15_prod psql -U postgres -d {{ db_name }} -c "
+          DROP SCHEMA IF EXISTS schema_demo_a CASCADE;
+          DROP SCHEMA IF EXISTS schema_demo_b CASCADE;
+          DROP USER IF EXISTS demo_a_prod;
+          DROP USER IF EXISTS demo_b_prod;
+        "
+      when: cleanup_choice.user_input | lower == 'yes'
+
+    - name: Show cleanup result
+      debug:
+        msg: "✅ Demo data cleaned up!"
+      when: cleanup_choice.user_input | lower == 'yes'

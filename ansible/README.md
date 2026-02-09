@@ -116,14 +116,30 @@ ansible-playbook playbooks/setup-localstack.yml
 ### Utility playbooks
 
 ```bash
-# Add new database with multi-tenant isolation
-ansible-playbook playbooks/postgres-add-database.yml \
-  -e "db_name=myapp" \
-  -e "master_pwd=xxx" \
-  -e "prod_pwd=yyy"
+# PostgreSQL Schema Isolation (Recommended)
+# Initialize database with schema isolation
+ansible-playbook playbooks/postgres-init-isolated-db.yml -e "db_name=smap"
 
-# Verify multi-tenant isolation (security test)
-ansible-playbook playbooks/postgres-verify-isolation.yml
+# Add service schema (each service gets isolated schema)
+ansible-playbook playbooks/postgres-add-service-schema.yml -e "service_name=auth db_name=smap"
+
+# List all schemas and users
+ansible-playbook playbooks/postgres-list-schemas.yml -e "db_name=smap"
+
+# Verify schema isolation (security test)
+ansible-playbook playbooks/postgres-verify-isolation.yml -e "db_name=smap"
+
+# Delete service schema
+ansible-playbook playbooks/postgres-delete-service-schema.yml -e "service_name=auth confirm_delete=yes"
+
+# Update service password
+ansible-playbook playbooks/postgres-update-service-password.yml -e "service_name=auth user_type=prod new_password=xxx"
+
+# Demo isolation (interactive test)
+ansible-playbook playbooks/postgres-demo-isolation.yml -e "db_name=smap"
+
+# Legacy: Add database (old method)
+ansible-playbook playbooks/postgres-add-database.yml -e "db_name=myapp"
 
 # Change PostgreSQL passwords
 ansible-playbook playbooks/postgres-change-password.yml
@@ -132,7 +148,15 @@ ansible-playbook playbooks/postgres-change-password.yml
 ansible-playbook playbooks/export-kubeconfig.yml
 ```
 
-**📖 PostgreSQL Multi-tenant Guide:** See [documents/postgres-multi-tenant.md](../documents/postgres-multi-tenant.md) for detailed architecture and security model.
+**📖 PostgreSQL Schema Isolation Guide:** See [../documents/postgres-schema-isolation.md](../documents/postgres-schema-isolation.md)
+
+**🚀 Quick Start with Makefile:**
+```bash
+make pg-init-db DB=smap              # Initialize database
+make pg-add-schema SERVICE=auth DB=smap  # Add service schema
+make pg-list DB=smap                 # List schemas
+make pg-verify DB=smap               # Verify isolation
+```
 
 ## Vault (Secrets)
 
