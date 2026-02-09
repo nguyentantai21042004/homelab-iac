@@ -1,0 +1,21 @@
+---
+# Playbook: Setup Qdrant Vector Database with Docker
+# Usage: ansible-playbook playbooks/setup-qdrant.yml -e "ansible_ssh_pass=21042004"
+
+- name: Setup Qdrant Vector Database
+  hosts: qdrant_servers
+  become: true
+  roles:
+    - role: common
+    - role: kernel-tuning
+      vars:
+        sysctl_params:
+          - { name: "vm.swappiness", value: "10" }
+          - { name: "vm.dirty_ratio", value: "15" }
+          - { name: "vm.dirty_background_ratio", value: "5" }
+    - role: docker
+    - role: data-disk
+      vars:
+        data_mount_point: "/mnt/qdrant_data"
+        disk_fstype: xfs
+    - role: qdrant

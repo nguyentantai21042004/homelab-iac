@@ -1,0 +1,16 @@
+---
+# Qdrant role defaults
+
+# Qdrant version
+qdrant_version: "latest"
+
+# Stack directory where docker-compose.yml and data live
+qdrant_stack_path: "/mnt/qdrant_data/qdrant-stack"
+
+# Ports
+qdrant_http_port: 6333
+qdrant_grpc_port: 6334
+
+# API Key (optional, for production use)
+# Leave empty for no authentication (suitable for internal/dev use)
+qdrant_api_key: ""

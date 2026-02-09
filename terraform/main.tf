@@ -23,6 +23,19 @@ module "postgres" {
   network        = local.port_groups.db_network
 }
 
+# ===== Qdrant VM (Vector Database) =====
+module "qdrant" {
+  source = "./modules/esxi-vm"
+
+  guest_name     = "qdrant"
+  clone_from_vm  = var.clone_from_vm
+  disk_store     = var.disk_store
+  numvcpus       = 2
+  memsize        = 4096 # 4GB RAM (suitable for student RAG projects)
+  data_disk_size = 50   # 50GB data disk (room for growth)
+  network        = local.port_groups.db_network
+}
+
 # ===== Object Storage VM (MinIO + Zot Registry) =====
 module "storage" {
   source = "./modules/esxi-vm"

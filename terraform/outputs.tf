@@ -6,6 +6,10 @@ output "postgres_ip" {
   value = module.postgres.vm_ip
 }
 
+output "qdrant_ip" {
+  value = module.qdrant.vm_ip
+}
+
 output "storage_ip" {
   value = module.storage.vm_ip
 }

@@ -1,0 +1,29 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:{{ qdrant_version }}
+    container_name: qdrant_prod
+    restart: always
+    environment:
+{% if qdrant_api_key %}
+      - QDRANT__SERVICE__API_KEY={{ qdrant_api_key }}
+{% endif %}
+      - QDRANT__LOG_LEVEL=INFO
+    volumes:
+      # Persistent storage for vectors and metadata
+      - ./storage:/qdrant/storage
+      # Snapshots for backup
+      - ./snapshots:/qdrant/snapshots
+    ports:
+      - "{{ qdrant_http_port }}:6333"  # HTTP API + Dashboard
+      - "{{ qdrant_grpc_port }}:6334"  # gRPC API
+    networks:
+      - qdrant_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  qdrant_net:
+    driver: bridge

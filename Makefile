@@ -39,6 +39,10 @@ apply-postgres: ## Apply terraform for PostgreSQL only
 	@echo "$(BLUE)Applying PostgreSQL module via Admin VM...$(NC)"
 	./scripts/remote-apply-postgres.sh $(ADMIN_VM_IP) $(ADMIN_VM_USER)
 
+apply-qdrant: ## Apply terraform for Qdrant only
+	@echo "$(BLUE)Applying Qdrant module via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform apply -target=module.qdrant -auto-approve"
+
 apply-storage: ## Apply terraform for Storage (MinIO + Zot) only
 	@echo "$(BLUE)Applying Storage module via Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform apply -target=module.storage -auto-approve"
@@ -50,6 +54,10 @@ apply-k3s: ## Apply terraform for K3s cluster (3 nodes)
 destroy-postgres: ## Destroy PostgreSQL VM
 	@echo "$(BLUE)Destroying PostgreSQL module via Admin VM...$(NC)"
 	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.postgres -auto-approve"
+
+destroy-qdrant: ## Destroy Qdrant VM
+	@echo "$(BLUE)Destroying Qdrant module via Admin VM...$(NC)"
+	sshpass -p $(SSH_PASS) ssh $(ADMIN_VM_USER)@$(ADMIN_VM_IP) "cd ~/homelab-iac/terraform && terraform destroy -target=module.qdrant -auto-approve"
 
 destroy-storage: ## Destroy Storage VM
 	@echo "$(BLUE)Destroying Storage module via Admin VM...$(NC)"

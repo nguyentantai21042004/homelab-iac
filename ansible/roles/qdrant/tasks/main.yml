@@ -1,0 +1,51 @@
+---
+# Tasks for qdrant role
+# Creates stack directories, templates docker-compose, starts Qdrant container
+
+- name: Create qdrant stack directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ qdrant_stack_path }}"
+    - "{{ qdrant_stack_path }}/storage"
+    - "{{ qdrant_stack_path }}/snapshots"
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ qdrant_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Qdrant container
+  shell: |
+    cd {{ qdrant_stack_path }}
+    docker-compose up -d
+  register: docker_compose_result
+
+- name: Wait for Qdrant HTTP API to be ready
+  wait_for:
+    port: "{{ qdrant_http_port }}"
+    delay: 5
+    timeout: 60
+
+- name: Check Qdrant health
+  uri:
+    url: "http://localhost:{{ qdrant_http_port }}/healthz"
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 5
+  delay: 3
+  until: health_check.status == 200
+
+- name: Show Qdrant status
+  debug:
+    msg: |
+      Qdrant is running!
+      HTTP API: http://{{ ansible_host }}:{{ qdrant_http_port }}
+      gRPC API: {{ ansible_host }}:{{ qdrant_grpc_port }}
+      Dashboard: http://{{ ansible_host }}:{{ qdrant_http_port }}/dashboard
+      Data path: {{ qdrant_stack_path }}/storage
+      Snapshots: {{ qdrant_stack_path }}/snapshots

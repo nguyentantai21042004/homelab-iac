@@ -32,6 +32,17 @@
       when: vm_hostname is defined
 
     # ===== Static IP =====
+    - name: Get primary network interface
+      shell: ip route | grep default | awk '{print $5}' | head -1
+      register: primary_interface
+      changed_when: false
+      when: static_ip is defined
+
+    - name: Show detected interface
+      debug:
+        msg: "Primary interface: {{ primary_interface.stdout }}"
+      when: static_ip is defined
+
     - name: Create netplan config
       copy:
         dest: /etc/netplan/00-static-ip.yaml
@@ -39,23 +50,12 @@
           network:
             version: 2
             ethernets:
-              ens36:
+              {{ primary_interface.stdout }}:
                 addresses:
                   - {{ static_ip }}
                 routes:
                   - to: default
                     via: {{ gateway }}
-                nameservers:
-                  addresses:
-                    - 8.8.8.8
-                    - 1.1.1.1
-              ens160:
-                addresses:
-                  - {{ static_ip }}
-                routes:
-                  - to: default
-                    via: {{ gateway }}
-                    metric: 200
                 nameservers:
                   addresses:
                     - 8.8.8.8
@@ -74,15 +74,19 @@
       poll: 0
       when: netplan_config.changed
 
-    - name: Update ansible_host to new IP
-      set_fact:
-        ansible_host: "{{ static_ip | regex_replace('/.*', '') }}"
+    - name: Wait for network to stabilize
+      pause:
+        seconds: 10
       when: netplan_config.changed
 
-    - name: Wait for connection with new IP
-      wait_for_connection:
+    - name: Test new IP connectivity
+      wait_for:
+        host: "{{ static_ip | regex_replace('/.*', '') }}"
+        port: 22
         delay: 5
         timeout: 60
+        state: started
+      delegate_to: localhost
       when: netplan_config.changed
 
     # ===== Data Disk =====
