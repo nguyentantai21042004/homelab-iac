@@ -1,0 +1,9 @@
+---
+# Namespace template - Replace NAMESPACE_NAME when deploying
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: NAMESPACE_NAME
+  labels:
+    app.kubernetes.io/name: rabbitmq-stack
+    app.kubernetes.io/component: message-broker

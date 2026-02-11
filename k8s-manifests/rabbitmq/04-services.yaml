@@ -1,0 +1,57 @@
+---
+# Headless Service - Cho StatefulSet discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-headless
+  namespace: NAMESPACE_NAME
+  labels:
+    app: rabbitmq
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
+    - name: prometheus
+      port: 15692
+      targetPort: 15692
+    - name: epmd
+      port: 4369
+      targetPort: 4369
+    - name: dist
+      port: 25672
+      targetPort: 25672
+  selector:
+    app: rabbitmq
+---
+# Client Service - Endpoint cho applications kết nối
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: NAMESPACE_NAME
+  labels:
+    app: rabbitmq
+spec:
+  type: LoadBalancer
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+      protocol: TCP
+    - name: management
+      port: 15672
+      targetPort: 15672
+      protocol: TCP
+    - name: prometheus
+      port: 15692
+      targetPort: 15692
+      protocol: TCP
+  selector:
+    app: rabbitmq
+  sessionAffinity: ClientIP

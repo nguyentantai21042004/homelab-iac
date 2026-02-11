@@ -1,0 +1,53 @@
+---
+# RabbitMQ Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: NAMESPACE_NAME
+data:
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_peer_discovery_k8s,rabbitmq_prometheus].
+  
+  rabbitmq.conf: |
+    # Cluster Configuration
+    cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.k8s.service_name = rabbitmq-headless
+    cluster_formation.k8s.hostname_suffix = .rabbitmq-headless.NAMESPACE_NAME.svc.cluster.local
+    
+    # Cluster partition handling - autoheal để tự động recover
+    cluster_partition_handling = autoheal
+    
+    # Queue master locator - balanced để phân tán queue
+    queue_master_locator = balanced
+    
+    # Disk free limit - Cảnh báo khi disk < 2GB
+    disk_free_limit.absolute = 2GB
+    
+    # Memory thresholds
+    vm_memory_high_watermark.relative = 0.5
+    vm_memory_high_watermark_paging_ratio = 0.75
+    
+    # Logging
+    log.console = true
+    log.console.level = info
+    log.file = false
+    
+    # Network
+    listeners.tcp.default = 5672
+    management.tcp.port = 15672
+    
+    # Default user (sẽ bị override bởi env vars từ secret)
+    default_user = admin
+    default_pass = admin
+    
+    # Heartbeat
+    heartbeat = 60
+    
+    # Connection limits
+    channel_max = 2048
+    
+    # Message TTL mặc định (optional)
+    # default_message_ttl = 86400000
