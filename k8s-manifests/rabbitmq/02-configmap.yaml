@@ -20,11 +20,8 @@ data:
     # Cluster partition handling - autoheal để tự động recover
     cluster_partition_handling = autoheal
     
-    # Queue master locator - balanced để phân tán queue
-    queue_master_locator = balanced
-    
-    # Disk free limit - Cảnh báo khi disk < 2GB
-    disk_free_limit.absolute = 2GB
+    # Disk free limit - Cảnh báo khi disk < 1GB
+    disk_free_limit.absolute = 1GB
     
     # Memory thresholds
     vm_memory_high_watermark.relative = 0.5
