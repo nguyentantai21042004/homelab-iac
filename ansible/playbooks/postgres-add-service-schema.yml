@@ -45,6 +45,9 @@
           -- 1. CREATE SCHEMA
           -- ============================================================
           CREATE SCHEMA IF NOT EXISTS schema_{{ service_name }};
+          
+          -- Transfer ownership to master user (best practice)
+          ALTER SCHEMA schema_{{ service_name }} OWNER TO {{ service_name }}_master;
 
           -- ============================================================
           -- 2. CREATE USERS
@@ -72,14 +75,27 @@
           -- 4. MASTER USER: Full control on its schema ONLY
           -- ============================================================
           GRANT ALL PRIVILEGES ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
+          
+          -- Grant on ALL existing objects
           GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
           GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
           GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_master;
           
-          -- Default privileges for future objects
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON TABLES TO {{ service_name }}_master;
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON SEQUENCES TO {{ service_name }}_master;
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT ALL ON FUNCTIONS TO {{ service_name }}_master;
+          -- Default privileges for FUTURE objects created by postgres
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON TABLES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON SEQUENCES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON FUNCTIONS TO {{ service_name }}_master;
+          
+          -- Default privileges for FUTURE objects created by master itself
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON TABLES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON SEQUENCES TO {{ service_name }}_master;
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT ALL ON FUNCTIONS TO {{ service_name }}_master;
 
           -- Set search_path: user will ONLY see their schema
           ALTER ROLE {{ service_name }}_master SET search_path TO schema_{{ service_name }};
@@ -88,12 +104,22 @@
           -- 5. PROD USER: CRUD only on its schema
           -- ============================================================
           GRANT USAGE ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
+          
+          -- Grant on ALL existing tables (critical for existing tables)
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
           GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_prod;
           
-          -- Default privileges for future objects
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ service_name }}_prod;
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT USAGE, SELECT ON SEQUENCES TO {{ service_name }}_prod;
+          -- Default privileges for FUTURE objects created by postgres
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ service_name }}_prod;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT USAGE, SELECT ON SEQUENCES TO {{ service_name }}_prod;
+          
+          -- Default privileges for FUTURE objects created by master user
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ service_name }}_prod;
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT USAGE, SELECT ON SEQUENCES TO {{ service_name }}_prod;
 
           -- Set search_path: user will ONLY see their schema
           ALTER ROLE {{ service_name }}_prod SET search_path TO schema_{{ service_name }};
@@ -102,10 +128,17 @@
           -- 6. READONLY USER: SELECT only on its schema
           -- ============================================================
           GRANT USAGE ON SCHEMA schema_{{ service_name }} TO {{ service_name }}_readonly;
+          
+          -- Grant on ALL existing tables
           GRANT SELECT ON ALL TABLES IN SCHEMA schema_{{ service_name }} TO {{ service_name }}_readonly;
           
-          -- Default privileges for future objects
-          ALTER DEFAULT PRIVILEGES IN SCHEMA schema_{{ service_name }} GRANT SELECT ON TABLES TO {{ service_name }}_readonly;
+          -- Default privileges for FUTURE objects created by postgres
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA schema_{{ service_name }} 
+            GRANT SELECT ON TABLES TO {{ service_name }}_readonly;
+          
+          -- Default privileges for FUTURE objects created by master user
+          ALTER DEFAULT PRIVILEGES FOR ROLE {{ service_name }}_master IN SCHEMA schema_{{ service_name }} 
+            GRANT SELECT ON TABLES TO {{ service_name }}_readonly;
 
           -- Set search_path: user will ONLY see their schema
           ALTER ROLE {{ service_name }}_readonly SET search_path TO schema_{{ service_name }};
