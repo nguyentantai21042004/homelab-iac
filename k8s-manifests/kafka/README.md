@@ -1,70 +1,80 @@
 # Kafka với Strimzi Operator
 
-## Đã Deploy Thành Công!
+Kafka cluster (KRaft mode) trong namespace `kafka`, dùng Strimzi CRD. Broker/controller chỉ chạy khi **đã cài Strimzi Kafka Operator** (script `deploy.sh` làm đủ bước).
 
-Kafka cluster đã được deploy với Strimzi Operator trong namespace `kafka`.
+## Deploy nhanh (khuyến nghị)
 
-> **Lưu ý**: Cluster đang chạy ổn định với KRaft mode (không cần Zookeeper).
-> Strimzi 0.50.0 đã hỗ trợ KRaft mặc định, không cần bật Feature Gates thủ công.
+```bash
+cd k8s-manifests/kafka
+chmod +x deploy.sh
+./deploy.sh
+```
 
-## Thông Tin Cluster
+Script: namespace → cài Strimzi operator → đợi Ready → apply cluster + Kafka UI. Đợi 2–3 phút rồi kiểm tra: `kubectl get pods,kafka -n kafka`.
 
-- **Kafka Version**: 4.0.1
-- **Mode**: KRaft (không cần Zookeeper)
-- **Replicas**: 1 broker + 1 controller
-- **Storage**: Longhorn persistent volumes
+## Deploy thủ công (nếu cần)
 
-## Access Points
+1. `kubectl apply -f 00-namespace.yaml`
+2. Cài Strimzi operator (xem **`00-STRIMZI-OPERATOR.md`** – kubectl hoặc Helm)
+3. Đợi operator pod Ready
+4. `kubectl apply -f 01-kafka-cluster.yaml`
+5. `kubectl apply -f 02-kafka-ui.yaml`
 
-**External (từ máy local):**
+## Thông tin cluster (manifest trong repo)
 
-- Bootstrap: `172.16.21.202:9094` hoặc `kafka.tantai.dev:9094`
-- Kafka UI: `172.16.21.203:8080` hoặc `kafbat.tantai.dev:8080`
+- **Tên cluster:** `kafka-cluster` (trong `01-kafka-cluster.yaml`)
+- **Kafka version:** 4.0.1
+- **Mode:** KRaft (không Zookeeper)
+- **Replicas:** 1 controller + 1 broker (KafkaNodePool)
+- **Storage:** Longhorn (controller 5Gi, broker 10Gi)
+
+## Thứ tự deploy (đã gộp trong `./deploy.sh`)
+
+1. `00-namespace.yaml` → namespace `kafka`
+2. Cài Strimzi operator (URL chính thức, có thể báo AlreadyExists – bỏ qua)
+3. Đợi operator Ready
+4. `01-kafka-cluster.yaml` → operator tạo broker/controller + services
+5. `02-kafka-ui.yaml` → Kafka UI
+
+## Access points
+
+**External (LoadBalancer):**
+
+- Bootstrap: `172.16.21.202:9094`
+- Kafka UI: `172.16.21.203:8080`
 
 **Internal (trong K8s):**
 
-- Bootstrap: `homelab-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092`
+- Bootstrap: `kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092`
 
-## Quick Start
+## Files trong thư mục
 
-### Sử dụng Makefile (Khuyến nghị)
+| File | Mô tả |
+|------|--------|
+| `00-namespace.yaml` | Namespace `kafka` |
+| `00-STRIMZI-OPERATOR.md` | Hướng dẫn cài Strimzi operator (bắt buộc đọc trước) |
+| `01-kafka-cluster.yaml` | Kafka CR + KafkaNodePool (controller, broker) |
+| `02-kafka-ui.yaml` | Kafka UI deployment + LoadBalancer |
+| `README.md` | File này |
+
+## Management
+
+### Kiểm tra status
 
 ```bash
-# Xem tất cả các lệnh có sẵn
-make -C k8s-manifests/kafka-strimzi help
-
-# Kiểm tra status
-make -C k8s-manifests/kafka-strimzi status
-
-# Kiểm tra health
-make -C k8s-manifests/kafka-strimzi check
-
-# List topics
-make -C k8s-manifests/kafka-strimzi list-topics
-
-# Tạo topic mới
-make -C k8s-manifests/kafka-strimzi create-topic
-
-# Xem logs
-make -C k8s-manifests/kafka-strimzi logs
+kubectl get kafka,kafkanodepool -n kafka
+kubectl get pods,pvc,svc -n kafka
 ```
 
-### Test Connection (Manual)
+### Tên pod (sau khi operator chạy)
+
+- Controller: `kafka-cluster-controller-*`
+- Broker: `kafka-cluster-kafka-*`
+- Entity operator: `kafka-cluster-entity-operator-*`
+
+### Create topic (KafkaTopic CR)
 
 ```bash
-# Từ máy local (cần kafka CLI tools)
-kafka-topics --bootstrap-server 172.16.21.202:9094 --list
-
-# Hoặc exec vào broker pod
-kubectl exec -it homelab-kafka-broker-0 -n kafka -- /bin/bash
-cd /opt/kafka/bin
-./kafka-topics.sh --bootstrap-server localhost:9092 --list
-```
-
-### Create Topic
-
-```bash
-# Via kubectl (recommended)
 kubectl apply -f - <<EOF
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
@@ -72,139 +82,53 @@ metadata:
   name: test-topic
   namespace: kafka
   labels:
-    strimzi.io/cluster: homelab-kafka
+    strimzi.io/cluster: kafka-cluster
 spec:
   partitions: 3
   replicas: 1
 EOF
-
-# Via kafka CLI
-kafka-topics --bootstrap-server 172.16.21.202:9094 \
-  --create --topic test-topic \
-  --partitions 3 --replication-factor 1
-```
-
-### Produce/Consume Messages
-
-```bash
-# Producer
-kafka-console-producer --bootstrap-server 172.16.21.202:9094 --topic test-topic
-
-# Consumer
-kafka-console-consumer --bootstrap-server 172.16.21.202:9094 \
-  --topic test-topic --from-beginning
-```
-
-## Files
-
-- `00-namespace.yaml` - Kafka namespace
-- `01-kafka-cluster.yaml` - Kafka cluster definition (KafkaNodePools + Kafka CRD)
-- `02-kafka-ui.yaml` - Kafka UI deployment
-- `check-health.sh` - Script kiểm tra health của cluster
-- `Makefile` - Các lệnh tiện ích để quản lý cluster
-
-## Management
-
-### Check Health
-
-```bash
-# Chạy script kiểm tra health
-./k8s-manifests/kafka-strimzi/check-health.sh
-
-# Hoặc kiểm tra thủ công
-kubectl get kafka -n kafka
-kubectl get pods -n kafka
-kubectl top pod -n kafka
-```
-
-### Scale Cluster
-
-```bash
-# Scale brokers
-kubectl patch kafkanodepool broker -n kafka \
-  --type merge -p '{"spec":{"replicas":3}}'
-
-# Scale controllers
-kubectl patch kafkanodepool controller -n kafka \
-  --type merge -p '{"spec":{"replicas":3}}'
-```
-
-### Check Status
-
-```bash
-# Cluster status
-kubectl get kafka -n kafka
-
-# Pods
-kubectl get pods -n kafka
-
-# Topics
-kubectl get kafkatopics -n kafka
-
-# Services
-kubectl get svc -n kafka
 ```
 
 ### Logs
 
 ```bash
-# Broker logs
-kubectl logs homelab-kafka-broker-0 -n kafka
+# Operator
+kubectl logs -n kafka -l name=strimzi-cluster-operator --tail=50
 
-# Controller logs
-kubectl logs homelab-kafka-controller-1 -n kafka
+# Broker (tên pod có thể khác, xem kubectl get pods -n kafka)
+kubectl logs kafka-cluster-kafka-0 -n kafka
 
-# Operator logs
-kubectl logs -n kafka -l name=strimzi-cluster-operator
+# Controller
+kubectl logs kafka-cluster-controller-0 -n kafka
 ```
 
-## Cleanup
+### Scale
 
 ```bash
-# Delete Kafka cluster (keeps PVCs)
-kubectl delete kafka homelab-kafka -n kafka
+kubectl patch kafkanodepool broker -n kafka --type merge -p '{"spec":{"replicas":3}}'
+kubectl patch kafkanodepool controller -n kafka --type merge -p '{"spec":{"replicas":3}}'
+```
+
+### Cleanup
+
+```bash
+# Xóa cluster (giữ PVC nếu cần)
+kubectl delete kafka kafka-cluster -n kafka
 kubectl delete kafkanodepool broker controller -n kafka
 
-# Delete everything including PVCs
+# Xóa hết kể cả PVC
 kubectl delete namespace kafka
 ```
 
 ## Troubleshooting
 
-Nếu gặp vấn đề, xem file TROUBLESHOOTING.md để biết chi tiết về:
-
-- Feature Gates chưa được bật
-- Tài nguyên memory quá thấp
-- Phiên bản không tương thích
-- Kafka UI không kết nối được
-- Storage issues
-
-**Quick checks:**
-
-```bash
-# Kiểm tra Feature Gates
-kubectl get deployment strimzi-cluster-operator -n kafka -o yaml | grep -A 2 "STRIMZI_FEATURE_GATES"
-
-# Xem logs của operator
-kubectl logs -n kafka -l name=strimzi-cluster-operator --tail=50
-
-# Kiểm tra resource usage
-kubectl top pod -n kafka
-```
+- **Chỉ có Kafka UI, không có broker/controller:** Chưa cài Strimzi operator hoặc operator chưa chạy. Làm theo `00-STRIMZI-OPERATOR.md`.
+- **Kafka UI không kết nối:** Đợi Kafka cluster Ready (operator đã tạo xong pods và service `kafka-cluster-kafka-bootstrap`).
+- **Kiểm tra operator:**  
+  `kubectl get pods -n kafka -l name=strimzi-cluster-operator`  
+  `kubectl logs -n kafka -l name=strimzi-cluster-operator --tail=50`
 
 ---
 
-**Deployed**: 2026-02-08  
-**Operator**: Strimzi 0.50.0  
-**Kafka**: 4.0.1 (KRaft mode)
-
-## Summary
-
-Kafka cluster đang chạy ổn định với:
-
-- KRaft mode (không cần Zookeeper)
-- 1 Controller + 1 Broker
-- Longhorn persistent storage
-- External access qua LoadBalancer
-- Kafka UI để quản lý
-- Tài nguyên đã được tối ưu (Controller: 1Gi, Broker: 2Gi)
+**Kafka:** 4.0.1 (KRaft)  
+**Manifest:** cluster name `kafka-cluster`, 1 controller + 1 broker, Longhorn storage.
