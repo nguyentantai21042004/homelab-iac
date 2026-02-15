@@ -39,6 +39,11 @@ data:
     maxmemory 512mb
     maxmemory-policy allkeys-lru
     
+    # Security (password is injected at runtime from Secret)
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    rename-command CONFIG ""
+    
     # Append Only File
     appendonly yes
     appendfilename "appendonly.aof"

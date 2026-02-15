@@ -64,11 +64,12 @@ Stack này bao gồm **Redis** (in-memory database) và **Redis Sentinel** để
 ```
 redis/
 ├── 00-namespace.yaml           # Namespace template
+├── 00-secret.yaml              # Redis password (replace CHANGEME before apply)
 ├── 01-configmap.yaml           # Redis + Sentinel configs
 ├── 02-redis-service.yaml       # Redis services (headless + client + sentinel)
 ├── 03-redis-statefulset.yaml   # Redis cluster (3 instances)
 ├── 04-sentinel-statefulset.yaml # Sentinel cluster (3 instances)
-├── deploy.sh                   # Deployment script
+├── 05-redis-external-service.yaml # LoadBalancer (MetalLB)
 └── README.md                   # This file
 ```
 
@@ -83,9 +84,11 @@ redis/
 
 **Redis Config:**
 
+- **Authentication:** Password từ Secret `redis-secret` (requirepass + masterauth), Sentinel dùng `sentinel auth-pass mymaster`
 - Persistence: RDB snapshots + AOF
 - Memory policy: allkeys-lru (evict oldest keys)
 - Max memory: 512MB
+- Security: FLUSHDB, FLUSHALL, CONFIG bị rename (disabled)
 - Replication settings
 
 **Sentinel Config:**
@@ -134,13 +137,18 @@ redis/
 
 ```bash
 # Set namespace
-NAMESPACE="my-app-redis"
+NAMESPACE="infrastructure"   # or my-app-redis
 
-# Apply manifests
-for file in *.yaml; do
-  sed "s/NAMESPACE_NAME/$NAMESPACE/g" "$file" | kubectl apply -f -
+# (Optional) Set Redis password before first apply - edit 00-secret.yaml or:
+kubectl create secret generic redis-secret --from-literal=redis-password=YOUR_STRONG_PASSWORD -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+# Apply manifests (order: namespace -> secret -> configmap -> services -> statefulsets)
+for file in 00-namespace.yaml 00-secret.yaml 01-configmap.yaml 02-redis-service.yaml 03-redis-statefulset.yaml 04-sentinel-statefulset.yaml 05-redis-external-service.yaml; do
+  [ -f "$file" ] && sed "s/NAMESPACE_NAME/$NAMESPACE/g" "$file" | kubectl apply -f -
 done
 ```
+
+**Lưu ý:** Trong `00-secret.yaml` thay `CHANGEME` bằng password thật trước khi apply, hoặc tạo secret bằng lệnh trên.
 
 ### Cách 3: Dùng Kustomize
 
@@ -188,12 +196,11 @@ kubectl logs -n $NAMESPACE redis-sentinel-0
 ```bash
 NAMESPACE="my-app-redis"
 
-# Check Redis replication
-kubectl exec -it -n $NAMESPACE redis-0 -- redis-cli INFO replication
+# Check Redis replication (password from secret)
+kubectl exec -it -n $NAMESPACE redis-0 -- redis-cli -a "$(kubectl get secret redis-secret -n $NAMESPACE -o jsonpath='{.data.redis-password}' | base64 -d)" INFO replication
 
 # Check Sentinel status
-kubectl exec -it -n $NAMESPACE redis-sentinel-0 -- \
-  redis-cli -p 26379 SENTINEL masters
+kubectl exec -it -n $NAMESPACE redis-sentinel-0 -- redis-cli -p 26379 SENTINEL masters
 
 # Get current master
 kubectl exec -it -n $NAMESPACE redis-sentinel-0 -- \
@@ -209,13 +216,13 @@ kubectl exec -it -n $NAMESPACE redis-sentinel-0 -- \
 ```bash
 NAMESPACE="my-app-redis"
 
-# Test ping
+# Test ping (cần password)
 kubectl run -it --rm redis-test \
   --image=redis:7.2-alpine \
   --restart=Never \
   -n $NAMESPACE \
-  -- redis-cli -h redis-client ping
-
+  -- redis-cli -h redis-client -a $REDIS_PASSWORD ping
+# Or get password from secret: REDIS_PASSWORD=$(kubectl get secret redis-secret -n $NAMESPACE -o jsonpath='{.data.redis-password}' | base64 -d)
 # Expected output: PONG
 ```
 
@@ -288,8 +295,8 @@ spring:
     sentinel:
       master: mymaster
       nodes:
-        - redis-sentinel.my-app-redis.svc.cluster.local:26379
-    password: "" # No password by default
+        - redis-sentinel.infrastructure.svc.cluster.local:26379
+    password: ${REDIS_PASSWORD}  # From Secret redis-secret
 ```
 
 **Node.js (ioredis):**
@@ -319,16 +326,17 @@ from redis.sentinel import Sentinel
 
 # With Sentinel (recommended)
 sentinel = Sentinel([
-    ('redis-sentinel.my-app-redis.svc.cluster.local', 26379)
-])
-master = sentinel.master_for('mymaster', socket_timeout=0.1)
-slave = sentinel.slave_for('mymaster', socket_timeout=0.1)
+    ('redis-sentinel.infrastructure.svc.cluster.local', 26379)
+], socket_timeout=0.1, password='YOUR_REDIS_PASSWORD')
+master = sentinel.master_for('mymaster', socket_timeout=0.1, password='YOUR_REDIS_PASSWORD')
+slave = sentinel.slave_for('mymaster', socket_timeout=0.1, password='YOUR_REDIS_PASSWORD')
 
 # Direct connection
 import redis
 r = redis.Redis(
-    host='redis-client.my-app-redis.svc.cluster.local',
+    host='redis-client.infrastructure.svc.cluster.local',
     port=6379,
+    password='YOUR_REDIS_PASSWORD',
     decode_responses=True
 )
 ```
@@ -517,24 +525,15 @@ kubectl exec -it redis-0 -n $NAMESPACE -- redis-cli CLIENT LIST
 
 ## Security (Production)
 
-Để production, nên enable:
+Stack này đã bật:
 
-1. **Password Authentication**
+1. **Password Authentication** – Secret `redis-secret`, key `redis-password`; được inject vào redis.conf (requirepass/masterauth) và sentinel.conf (auth-pass mymaster).
+2. **Disable Dangerous Commands** – FLUSHDB, FLUSHALL, CONFIG đã bị tắt trong `01-configmap.yaml`.
 
-```yaml
-# Add to redis.conf
-requirepass your-strong-password
-```
+Tùy chọn thêm:
 
-2. **TLS/SSL Encryption**
-3. **Network Policies**
-4. **Disable Dangerous Commands**
-
-```yaml
-rename-command FLUSHDB ""
-rename-command FLUSHALL ""
-rename-command CONFIG ""
-```
+- **TLS/SSL** – Cấu hình TLS trong redis.conf và expose qua Service.
+- **Network Policies** – Giới hạn ingress/egress cho namespace Redis.
 
 ---
 

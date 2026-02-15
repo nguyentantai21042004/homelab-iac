@@ -33,12 +33,19 @@ spec:
       initContainers:
         - name: init-sentinel
           image: redis:7.2-alpine
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
           command:
             - sh
             - -c
             - |
               set -ex
               cp /mnt/config/sentinel.conf /etc/redis/sentinel.conf
+              echo "sentinel auth-pass mymaster $REDIS_PASSWORD" >> /etc/redis/sentinel.conf
           volumeMounts:
             - name: config
               mountPath: /mnt/config
