@@ -42,15 +42,7 @@
           \c {{ db_name }}
 
           -- ============================================================
-          -- 1. CREATE SCHEMA
-          -- ============================================================
-          CREATE SCHEMA IF NOT EXISTS schema_{{ service_name }};
-          
-          -- Transfer ownership to master user (best practice)
-          ALTER SCHEMA schema_{{ service_name }} OWNER TO {{ service_name }}_master;
-
-          -- ============================================================
-          -- 2. CREATE USERS
+          -- 1. CREATE USERS (must exist before OWNER TO)
           -- ============================================================
           DO $$
           BEGIN
@@ -65,6 +57,12 @@
             END IF;
           END
           $$;
+
+          -- ============================================================
+          -- 2. CREATE SCHEMA and set owner
+          -- ============================================================
+          CREATE SCHEMA IF NOT EXISTS schema_{{ service_name }};
+          ALTER SCHEMA schema_{{ service_name }} OWNER TO {{ service_name }}_master;
 
           -- ============================================================
           -- 3. GRANT DATABASE CONNECTION (Required for login)
