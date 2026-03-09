@@ -37,30 +37,6 @@ services:
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-      /usr/bin/mc mb --ignore-existing myminio/zot-registry;
-      /usr/bin/mc anonymous set download myminio/zot-registry;
+      /usr/bin/mc mb --ignore-existing myminio/harbor-registry;
       exit 0;
       "
-
-  zot:
-    image: {{ zot_image | default('ghcr.io/project-zot/zot-linux-amd64:v2.1.1') }}
-    container_name: zot-registry
-    restart: always
-    networks:
-      - storage-net
-    ports:
-      - "5000:5000"
-    volumes:
-      - {{ storage_stack_path }}/zot-config.json:/etc/zot/config.json:ro
-      - {{ storage_stack_path }}/htpasswd:/etc/zot/htpasswd:ro
-    depends_on:
-      minio:
-        condition: service_healthy
-      createbuckets:
-        condition: service_completed_successfully
-    command: ["serve", "/etc/zot/config.json"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/v2/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3

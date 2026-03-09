@@ -1,0 +1,119 @@
+version: '3.9'
+
+services:
+  harbor-log:
+    image: goharbor/harbor-log:v{{ harbor_version }}
+    container_name: harbor-log
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETFCAP
+    volumes:
+      - /var/log/harbor/:/var/log/docker/
+    networks:
+      - harbor
+
+  harbor-db:
+    image: goharbor/harbor-db:v{{ harbor_version }}
+    container_name: harbor-db
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETFCAP
+    env_file:
+      - .env
+    volumes:
+      - /data/database:/var/lib/postgresql/data
+    networks:
+      - harbor
+
+  harbor-core:
+    image: goharbor/harbor-core:v{{ harbor_version }}
+    container_name: harbor-core
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETFCAP
+    env_file:
+      - .env
+    depends_on:
+      - harbor-log
+      - harbor-db
+    volumes:
+      - {{ harbor_install_path }}/harbor.yml:/etc/harbor/harbor.yml:ro
+      - /data/secret/keys/private_key.pem:/etc/harbor/private_key.pem:ro
+      - /data/ca_download/:/etc/harbor/ssl/
+      - /data/psc/:/etc/harbor/ssl/private_certificate_authority/
+    networks:
+      - harbor
+    ports:
+      - "{{ harbor_http_port }}:8080"
+
+  harbor-jobservice:
+    image: goharbor/harbor-jobservice:v{{ harbor_version }}
+    container_name: harbor-jobservice
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETFCAP
+    env_file:
+      - .env
+    depends_on:
+      - harbor-log
+      - harbor-core
+    volumes:
+      - {{ harbor_install_path }}/harbor.yml:/etc/harbor/harbor.yml:ro
+      - /data/job_logs/:/var/log/jobs/
+      - /data/cache/:/home/harbor
+    networks:
+      - harbor
+
+  harbor-registry:
+    image: goharbor/registry-photon:v{{ harbor_version }}
+    container_name: harbor-registry
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETFCAP
+    environment:
+      GODEBUG: madvdontneed=1
+    volumes:
+      - /data/registry:/storage
+      - {{ harbor_install_path }}/common/config/registry/:/etc/registry/
+      - /data/secret/registry/root.crt:/etc/registry/root.crt:ro
+    networks:
+      - harbor
+    depends_on:
+      - harbor-log
+
+  harbor-portal:
+    image: goharbor/harbor-portal:v{{ harbor_version }}
+    container_name: harbor-portal
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETFCAP
+    networks:
+      - harbor
+    depends_on:
+      - harbor-log
+
+networks:
+  harbor:
+    driver: bridge

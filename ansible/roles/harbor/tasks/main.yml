@@ -1,0 +1,85 @@
+---
+# Tasks for harbor role
+# Downloads Harbor offline installer and pulls needed images to local Docker daemon.
+# Uses docker-compose to run Harbor with MinIO S3 storage backend.
+
+- name: Create Harbor install directory
+  file:
+    path: "{{ harbor_install_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Check if Harbor installer archive already exists
+  stat:
+    path: "/tmp/harbor-offline-installer-v{{ harbor_version }}.tgz"
+  register: harbor_archive
+
+- name: Download Harbor offline installer
+  get_url:
+    url: "{{ harbor_installer_url }}"
+    dest: "/tmp/harbor-offline-installer-v{{ harbor_version }}.tgz"
+    mode: "0644"
+  when: not harbor_archive.stat.exists
+
+- name: Extract Harbor installer
+  unarchive:
+    src: "/tmp/harbor-offline-installer-v{{ harbor_version }}.tgz"
+    dest: "/opt"
+    remote_src: true
+    creates: "/opt/harbor/install.sh"
+
+- name: Load Harbor images from offline installer
+  shell: |
+    cd {{ harbor_install_path }}
+    docker load -i harbor.v{{ harbor_version }}.tar.gz 2>&1 | tail -5
+  ignore_errors: true
+
+- name: Create /data directory for Harbor
+  file:
+    path: /data
+    state: directory
+    mode: "0755"
+
+- name: Template harbor.yml configuration
+  template:
+    src: harbor.yml.j2
+    dest: "{{ harbor_install_path }}/harbor.yml"
+    mode: "0640"
+    owner: root
+    group: root
+
+- name: Run Harbor prepare script (generates docker-compose.yml + configs)
+  shell: |
+    cd {{ harbor_install_path }}
+    ./prepare 2>&1
+  register: harbor_prepare
+  failed_when: harbor_prepare.rc != 0
+
+- name: Start Harbor containers
+  shell: |
+    cd {{ harbor_install_path }}
+    docker-compose up -d
+  register: harbor_start
+  changed_when: "'Creating' in harbor_start.stdout or 'Starting' in harbor_start.stdout or 'Pulling' in harbor_start.stdout"
+
+- name: Wait for Harbor core to be ready
+  wait_for:
+    port: "{{ harbor_http_port }}"
+    delay: 20
+    timeout: 180
+
+- name: Show Harbor status
+  debug:
+    msg: |
+      ✅ Harbor Registry is running!
+
+      Harbor UI:    http://{{ ansible_host }}:{{ harbor_http_port }}
+      External URL: {{ harbor_external_url }}
+
+      Admin credentials:
+      - Username: admin
+      - Password: [configured via harbor_admin_password]
+
+      Storage: MinIO S3 ({{ harbor_s3_regionendpoint }}/{{ harbor_s3_bucket }})
+
+      Install path: {{ harbor_install_path }}

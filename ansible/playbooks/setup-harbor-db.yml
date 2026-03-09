@@ -1,0 +1,82 @@
+---
+# Playbook: Setup Harbor database on PostgreSQL
+# Creates the 'harbor' database and 'harbor' user with full privileges.
+# Harbor manages its own schema internally — it just needs DB + user pre-created.
+#
+# Usage:
+#   ansible-playbook playbooks/setup-harbor-db.yml
+#   ansible-playbook playbooks/setup-harbor-db.yml -e "harbor_db_password=MySecurePass"
+
+- name: Setup Harbor PostgreSQL database
+  hosts: postgres_servers
+  become: true
+
+  vars_files:
+    - ../group_vars/postgres_servers.yml
+    - ../group_vars/all/vault.yml
+
+  vars:
+    harbor_db_name: "harbor"
+    harbor_db_user: "harbor"
+    harbor_db_password: "{{ vault_harbor_db_password | default('Harbor12345') }}"
+
+  tasks:
+    - name: Create Harbor SQL setup script
+      copy:
+        dest: /tmp/harbor-db-setup.sql
+        mode: "0644"
+        content: |
+          -- Harbor Database Setup
+          -- Harbor will create and manage its own tables.
+
+          -- Create user (ignore if already exists)
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ harbor_db_user }}') THEN
+              CREATE USER {{ harbor_db_user }} WITH PASSWORD '{{ harbor_db_password }}';
+            ELSE
+              ALTER USER {{ harbor_db_user }} WITH PASSWORD '{{ harbor_db_password }}';
+            END IF;
+          END
+          $$;
+
+          -- Create database (ignore if already exists)
+          SELECT 'CREATE DATABASE {{ harbor_db_name }} OWNER {{ harbor_db_user }}'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ harbor_db_name }}')\gexec
+
+          -- Revoke PUBLIC access (security isolation)
+          REVOKE ALL ON DATABASE {{ harbor_db_name }} FROM PUBLIC;
+          REVOKE CONNECT ON DATABASE {{ harbor_db_name }} FROM PUBLIC;
+
+          -- Grant full access to harbor user
+          GRANT ALL PRIVILEGES ON DATABASE {{ harbor_db_name }} TO {{ harbor_db_user }};
+          GRANT CONNECT ON DATABASE {{ harbor_db_name }} TO {{ harbor_db_user }};
+
+    - name: Execute Harbor DB setup script
+      shell: |
+        docker exec -i pg15_prod psql -U postgres < /tmp/harbor-db-setup.sql
+      register: harbor_db_result
+
+    - name: Grant schema privileges (connect to harbor db)
+      shell: |
+        docker exec -i pg15_prod psql -U postgres -d {{ harbor_db_name }} -c "
+          GRANT ALL ON SCHEMA public TO {{ harbor_db_user }};
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO {{ harbor_db_user }};
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO {{ harbor_db_user }};
+        "
+
+    - name: Cleanup SQL script
+      file:
+        path: /tmp/harbor-db-setup.sql
+        state: absent
+
+    - name: Show result
+      debug:
+        msg: |
+          Harbor database setup complete!
+
+          Database: {{ harbor_db_name }}
+          User:     {{ harbor_db_user }}
+
+          Connection string:
+            postgresql://{{ harbor_db_user }}:***@{{ ansible_host }}:5432/{{ harbor_db_name }}

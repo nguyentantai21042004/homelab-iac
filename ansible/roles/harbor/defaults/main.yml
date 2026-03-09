@@ -1,0 +1,16 @@
+---
+# Harbor role defaults
+
+harbor_version: "2.11.1"
+harbor_installer_url: "https://github.com/goharbor/harbor/releases/download/v{{ harbor_version }}/harbor-offline-installer-v{{ harbor_version }}.tgz"
+harbor_install_path: "/opt/harbor"
+harbor_http_port: 8080
+harbor_external_url: "https://registry.tantai.dev"
+harbor_admin_password: "Harbor12345"
+
+# MinIO S3 storage (reuse minio_root_user/password from minio role)
+harbor_s3_bucket: "harbor-registry"
+harbor_s3_region: "us-east-1"
+harbor_s3_regionendpoint: "http://172.16.21.10:9000"
+harbor_s3_accesskey: "{{ minio_root_user | default('tantai') }}"
+harbor_s3_secretkey: "{{ minio_root_password | default('21042004') }}"

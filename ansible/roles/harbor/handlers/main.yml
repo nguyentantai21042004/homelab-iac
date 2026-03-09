@@ -1,0 +1,8 @@
+---
+- name: Reconfigure Harbor
+  shell: |
+    cd {{ harbor_install_path }}
+    docker-compose down
+    ./prepare
+    docker-compose up -d
+  listen: Reconfigure Harbor

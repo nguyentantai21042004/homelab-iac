@@ -1,7 +1,7 @@
 ---
-# Playbook: Setup MinIO + Zot Registry
+# Playbook: Setup MinIO + Harbor Registry
 
-- name: Setup Object Storage (MinIO + Zot Registry)
+- name: Setup Object Storage (MinIO + Harbor Registry)
   hosts: storage_servers
   become: true
   roles:
@@ -18,3 +18,4 @@
         data_mount_point: "/mnt/storage_data"
         disk_fstype: xfs
     - role: minio
+    - role: harbor
