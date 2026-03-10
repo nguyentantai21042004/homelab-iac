@@ -76,9 +76,20 @@ http:
       tls:
         certResolver: letsencrypt
 
+    # SMAP API Gateway subdomain
+    k3s-smap-api:
+      rule: "Host(`smap-api.tantai.dev`)"
+      service: k3s-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - forwarded-headers
+      tls:
+        certResolver: letsencrypt
+
     # Wildcard for future K3s subdomains (app.tantai.dev, api.tantai.dev, etc.)
     # Add more specific routers here as needed:
-    # 
+    #
     # k3s-app:
     #   rule: "Host(`app.tantai.dev`)"
     #   service: k3s-service
